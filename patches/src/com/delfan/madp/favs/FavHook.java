@@ -10,6 +10,8 @@ import android.widget.TextView;
 import com.delfan.madp.fragments.fr_favs;
 
 public final class FavHook {
+    private static volatile FavItem latestLoadedSnapshot = null;
+
     private FavHook() {}
 
     public static String onDetailsCreate(Activity act, String videoid, String title, String poster, String what) {
@@ -49,10 +51,27 @@ public final class FavHook {
     public static String onDetailsLoaded(Activity act, String videoid, String title, String poster, String what) {
         if (act == null) return "F";
         FavItem snapshot = captureDetailsSnapshot(act, videoid, title, poster, what);
+        latestLoadedSnapshot = snapshot.copy();
         OfflineFavStore.updateMetadataIfFavorited(act, snapshot);
         boolean fav = OfflineFavStore.isFavorite(act, videoid);
         applyButtonState(act, videoid, fav);
         return fav ? "T" : "F";
+    }
+
+    public static FavItem mergeWithLatestLoaded(FavItem base) {
+        if (base == null) return null;
+        FavItem latest = latestLoadedSnapshot;
+        if (latest == null || base.videoid == null || !base.videoid.trim().equals(latest.videoid)) {
+            return base;
+        }
+        FavItem merged = base.copy();
+        if (latest.title != null && !latest.title.trim().isEmpty()) merged.title = latest.title;
+        if (latest.des != null && !latest.des.trim().isEmpty()) merged.des = latest.des;
+        if (latest.poster != null && !latest.poster.trim().isEmpty()) merged.poster = latest.poster;
+        if (latest.what != null && !latest.what.trim().isEmpty()) merged.what = latest.what;
+        if (latest.year != null && !latest.year.trim().isEmpty()) merged.year = latest.year;
+        if (latest.imdb != null && !latest.imdb.trim().isEmpty()) merged.imdb = latest.imdb;
+        return merged;
     }
 
     public static void onDetailsFavClicked(final Activity act, final String videoid, String title, String poster, String what) {
