@@ -34,10 +34,19 @@ def screencap(out_dir: Path, name: str):
     print(f"  [screenshot] {path.name} ({len(data)} bytes)", flush=True)
 
 
-def dump_ui():
-    adb("shell", "uiautomator", "dump", "/sdcard/uidump.xml")
-    xml_text = adb("shell", "cat", "/sdcard/uidump.xml")
-    return ET.fromstring(xml_text)
+def dump_ui(dismiss_anr: bool = True):
+    for _ in range(3):
+        adb("shell", "uiautomator", "dump", "/sdcard/uidump.xml")
+        xml_text = adb("shell", "cat", "/sdcard/uidump.xml")
+        root = ET.fromstring(xml_text)
+        if dismiss_anr:
+            aerr_close = find_node(root, resource_id="android:id/aerr_close")
+            if aerr_close is not None and aerr_close.attrib.get("package") == "android":
+                print("  [system] dismissing Android ANR dialog (Close app)", flush=True)
+                tap_node(aerr_close, "android:id/aerr_close", wait=1.0)
+                continue
+        return root
+    return root
 
 
 def parse_bounds(bounds_str: str):
