@@ -382,19 +382,30 @@ def main():
         while time.time() < deadline:
             root = dump_ui()
             for node in root.iter("node"):
+                cls = node.attrib.get("class", "")
                 txt = node.attrib.get("text", "").strip().lower()
                 rid = node.attrib.get("resource-id", "")
-                if txt in ("save", "ذخیره") or rid.endswith(":id/button1") or rid.endswith(":id/container_save"):
+                if (txt in ("save", "ذخیره") or (rid == "android:id/button1" and "Button" in cls)):
                     if parse_bounds(node.attrib.get("bounds", "")):
                         save_doc_btn = node
                         break
             if save_doc_btn is not None:
+                # Re-dump once after 0.6s so IME animation has settled
+                time.sleep(0.6)
+                root = dump_ui()
+                for node in root.iter("node"):
+                    cls = node.attrib.get("class", "")
+                    txt = node.attrib.get("text", "").strip().lower()
+                    rid = node.attrib.get("resource-id", "")
+                    if (txt in ("save", "ذخیره") or (rid == "android:id/button1" and "Button" in cls)):
+                        save_doc_btn = node
+                        break
                 break
             time.sleep(0.8)
         screencap(scr_dir, "13-saf-export-picker.png")
         if save_doc_btn is None:
             raise AssertionError("DocumentsUI SAVE button not found. Visible UI:\n" + "\n".join(list_all_texts(root)[:40]))
-        tap_node(save_doc_btn, f"DocumentsUI SAVE ({save_doc_btn.attrib.get('text')!r})", wait=2.0)
+        tap_node(save_doc_btn, f"DocumentsUI SAVE ({save_doc_btn.attrib.get('text')!r} @ {save_doc_btn.attrib.get('bounds')})", wait=2.0)
 
         # Open Series sub-tab, tap Series #1 directly from Offline Favorites, remove it!
         root = dump_ui()
