@@ -150,12 +150,14 @@ public final class FavHook {
     private static String cleanImdb(String raw) {
         if (raw == null) return "";
         String s = raw.replace("IMDB", "").replace("imdb", "").replace(":", "").trim();
+        if (s.equals("...") || s.equals("در حال دریافت")) return "";
         return s;
     }
 
     private static String cleanPrefix(String raw, String prefixWord) {
         if (raw == null) return "";
         String s = raw.replace(prefixWord, "").replace(":", "").trim();
+        if (s.equals("...") || s.equals("در حال دریافت")) return "";
         return s;
     }
 
