@@ -262,6 +262,15 @@ def main():
         txt_btn = find_node(root, resource_id="TxtBtnFave_ADV")
         if txt_btn is None or "افزودن به علاقه‌مندی" not in txt_btn.attrib.get("text", ""):
             raise AssertionError(f"Unexpected initial button text: {txt_btn.attrib if txt_btn is not None else None}")
+        des_node = find_node(root, resource_id="TxtDes_ADV")
+        movie1_des_snippet = ""
+        if des_node is not None:
+            raw_des = des_node.attrib.get("text", "").strip()
+            for line in raw_des.splitlines():
+                line = line.strip()
+                if len(line) >= 12 and not line.startswith("نام اصلی"):
+                    movie1_des_snippet = line[:18]
+                    break
         screencap(scr_dir, "03-details-before-fav.png")
 
         step("4. Tap Favorite -> create folder 'Weekend' inside dialog -> save")
@@ -367,59 +376,70 @@ def main():
 
         step("7. Test SAF Export -> Remove Series Item -> SAF Import Restore")
         root = dump_ui()
-        tap_node(find_node(root, resource_id="BtnExport_Frg5"), "BtnExport_Frg5", wait=2.0)
-        root = dump_ui()
+        tap_node(find_node(root, resource_id="BtnExport_Frg5"), "BtnExport_Frg5", wait=2.5)
+        deadline = time.time() + 10.0
+        save_doc_btn = None
+        while time.time() < deadline:
+            root = dump_ui()
+            for node in root.iter("node"):
+                txt = node.attrib.get("text", "").strip().lower()
+                rid = node.attrib.get("resource-id", "")
+                if txt in ("save", "ذخیره") or rid.endswith(":id/button1") or rid.endswith(":id/container_save"):
+                    if parse_bounds(node.attrib.get("bounds", "")):
+                        save_doc_btn = node
+                        break
+            if save_doc_btn is not None:
+                break
+            time.sleep(0.8)
         screencap(scr_dir, "13-saf-export-picker.png")
-        save_doc_btn = (
-            find_node(root, text="SAVE")
-            or find_node(root, text="Save")
-            or find_node(root, text="ذخیره")
-        )
-        export_worked = False
-        if save_doc_btn is not None:
-            tap_node(save_doc_btn, "DocumentsUI SAVE", wait=1.5)
-            export_worked = True
-        else:
-            adb("shell", "input", "keyevent", "KEYCODE_BACK")
-            time.sleep(1.0)
+        if save_doc_btn is None:
+            raise AssertionError("DocumentsUI SAVE button not found. Visible UI:\n" + "\n".join(list_all_texts(root)[:40]))
+        tap_node(save_doc_btn, f"DocumentsUI SAVE ({save_doc_btn.attrib.get('text')!r})", wait=2.0)
 
-        if export_worked:
-            # Open Series sub-tab, tap Series #1 directly from Offline Favorites, remove it!
-            root = dump_ui()
-            tap_node(find_node(root, resource_id="TabB_Frg5"), "Series sub-tab")
-            root = dump_ui()
-            tap_node(find_node(root, text=series1_title), "open Series #1 from offline favs", wait=2.0)
-            root, btn_fav = wait_for_node(timeout=8.0, resource_id="BtnAddFave_ADV")
-            tap_node(btn_fav, "BtnAddFave_ADV")
-            root, btn_rem = wait_for_node(timeout=6.0, resource_id="BtnRemoveFav_FavDlg")
-            tap_node(btn_rem, "BtnRemoveFav_FavDlg", wait=0.8)
-            adb("shell", "input", "keyevent", "KEYCODE_BACK")
-            time.sleep(1.0)
+        # Open Series sub-tab, tap Series #1 directly from Offline Favorites, remove it!
+        root = dump_ui()
+        tap_node(find_node(root, resource_id="TabB_Frg5"), "Series sub-tab")
+        root = dump_ui()
+        tap_node(find_node(root, text=series1_title), "open Series #1 from offline favs", wait=2.0)
+        root, btn_fav = wait_for_node(timeout=8.0, resource_id="BtnAddFave_ADV")
+        tap_node(btn_fav, "BtnAddFave_ADV")
+        root, btn_rem = wait_for_node(timeout=6.0, resource_id="BtnRemoveFav_FavDlg")
+        tap_node(btn_rem, "BtnRemoveFav_FavDlg", wait=0.8)
+        adb("shell", "input", "keyevent", "KEYCODE_BACK")
+        time.sleep(1.0)
 
-            root = dump_ui()
-            assert_text_absent(root, series1_title)
+        root = dump_ui()
+        assert_text_absent(root, series1_title)
 
-            tap_node(find_node(root, resource_id="BtnImport_Frg5"), "BtnImport_Frg5", wait=2.0)
+        tap_node(find_node(root, resource_id="BtnImport_Frg5"), "BtnImport_Frg5", wait=2.5)
+        imp_deadline = time.time() + 10.0
+        json_file_node = None
+        tried_dl = False
+        while time.time() < imp_deadline:
             root = dump_ui()
-            screencap(scr_dir, "14-saf-import-picker.png")
             json_file_node = find_node(root, text_contains="mymoviebox-favorites")
             if json_file_node is not None:
-                tap_node(json_file_node, "pick exported json", wait=1.5)
-                root = dump_ui()
-                if find_node(root, text=series1_title) is None:
-                    raise AssertionError("SAF Import did not restore Series #1!")
-                log("  [PASS] SAF Export -> Delete -> SAF Import restored Series #1!")
-            else:
-                adb("shell", "input", "keyevent", "KEYCODE_BACK")
-                time.sleep(1.0)
-                log("  [INFO] Exported file not visible in default DocumentsUI view; skipping auto-tap import")
+                break
+            if not tried_dl:
+                dl_chip = find_node(root, text="Downloads")
+                if dl_chip is not None:
+                    tried_dl = True
+                    tap_node(dl_chip, "DocumentsUI Downloads chip", wait=1.5)
+                    continue
+            time.sleep(0.8)
+        screencap(scr_dir, "14-saf-import-picker.png")
+        if json_file_node is None:
+            raise AssertionError("Exported JSON not visible in DocumentsUI import picker. Visible UI:\n" + "\n".join(list_all_texts(root)[:40]))
+        tap_node(json_file_node, "pick exported json", wait=2.0)
+        root, _ = wait_for_node(timeout=8.0, text=series1_title)
+        log("  [PASS] SAF Export -> Delete -> SAF Import restored Series #1!")
 
-        step("8. Test Persistence Across Full Process Kill (am force-stop)")
+        step("8. Test Persistence Across Full Process Kill (am force-stop) & True Offline Mode")
         adb("shell", "am", "force-stop", PKG)
         time.sleep(1.0)
         launch_and_dismiss_to_main()
         root = tap_bottom_tab("علاقه مندی")
-        for t in (movie1_title, movie2_title):
+        for t in (movie1_title, movie2_title, series1_title):
             if find_node(root, text=t) is None:
                 raise AssertionError(f"Persistence failed after force-stop: missing {t!r}")
         tap_node(find_node(root, resource_id="TabFolders_Frg5"), "Folders tab after restart")
@@ -427,6 +447,23 @@ def main():
         if find_node(root, text="TopPicks") is None or find_node(root, text="Sci-Fi") is None:
             raise AssertionError("Folders failed to persist after force-stop")
         screencap(scr_dir, "15-favs-after-restart.png")
+
+        # Disable network completely & verify opening saved Favorite shows prefilled Details & folder count!
+        adb("shell", "svc", "wifi", "disable", check=False)
+        adb("shell", "svc", "data", "disable", check=False)
+        time.sleep(1.0)
+        tap_node(find_node(root, resource_id="TabAll_Frg5"), "All tab offline")
+        root = dump_ui()
+        tap_node(find_node(root, text=movie1_title), f"open {movie1_title} completely offline", wait=2.0)
+        root, btn_fav_off = wait_for_node(timeout=8.0, resource_id="BtnAddFave_ADV")
+        txt_off = find_node(root, resource_id="TxtBtnFave_ADV")
+        if txt_off is None or "در علاقه‌مندی‌ها" not in txt_off.attrib.get("text", ""):
+            raise AssertionError(f"Offline Details missing saved state: {txt_off.attrib if txt_off is not None else None}")
+        if movie1_des_snippet and find_node(root, text_contains=movie1_des_snippet) is None:
+            raise AssertionError(f"Offline Details failed to prefill saved description ({movie1_des_snippet!r}) without network!")
+        screencap(scr_dir, "16-offline-details-no-network.png")
+        adb("shell", "input", "keyevent", "KEYCODE_BACK")
+        time.sleep(1.0)
 
         step("9. Inspect logcat for zero fatal exceptions")
         lc = adb("logcat", "-d", "-t", "1500", check=False)
@@ -456,6 +493,8 @@ def main():
             pass
         raise
     finally:
+        adb("shell", "svc", "wifi", "enable", check=False)
+        adb("shell", "svc", "data", "enable", check=False)
         try:
             (log_dir / "e2e-stdout.log").write_text("\n".join(log_lines) + "\n", encoding="utf-8")
         except Exception:
