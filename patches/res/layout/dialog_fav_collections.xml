@@ -78,9 +78,8 @@
 
         <ScrollView
             android:layout_width="match_parent"
-            android:layout_height="180dp"
-            android:layout_marginTop="6dp"
-            android:fillViewport="true">
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp">
 
             <LinearLayout
                 android:id="@+id/ContainerFolders_FavDlg"

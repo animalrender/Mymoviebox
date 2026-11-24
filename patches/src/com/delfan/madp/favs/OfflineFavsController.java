@@ -1,6 +1,6 @@
 package com.delfan.madp.favs;
 
-import Li.d;
+import i.d;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
