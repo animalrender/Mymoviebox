@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingLeft="4dp"
+    android:paddingTop="3dp"
+    android:paddingRight="4dp"
+    android:paddingBottom="3dp">
+
+    <androidx.cardview.widget.CardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:elevation="2dp">
+
+        <RelativeLayout
+            android:id="@+id/RelMain_FavFolder"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/BgItemsFilms"
+            android:clickable="true"
+            android:focusable="true"
+            android:paddingLeft="8dp"
+            android:paddingTop="10dp"
+            android:paddingRight="12dp"
+            android:paddingBottom="10dp">
+
+            <LinearLayout
+                android:id="@+id/LinActions_FavFolder"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentLeft="true"
+                android:layout_centerVertical="true"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:id="@+id/BtnEdit_FavFolder"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:layout_marginRight="4dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="7dp"
+                    android:src="@drawable/ic_fav_edit" />
+
+                <ImageView
+                    android:id="@+id/BtnDelete_FavFolder"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="7dp"
+                    android:src="@drawable/ic_fav_delete" />
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/ImgIcon_FavFolder"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:layout_alignParentRight="true"
+                android:layout_centerVertical="true"
+                android:background="@drawable/fav_folder_badge_bg"
+                android:padding="8dp"
+                android:src="@drawable/ic_fav_folder" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_centerVertical="true"
+                android:layout_marginLeft="8dp"
+                android:layout_marginRight="10dp"
+                android:layout_toLeftOf="@id/ImgIcon_FavFolder"
+                android:layout_toRightOf="@id/LinActions_FavFolder"
+                android:gravity="right"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/TxtName_FavFolder"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:fontFamily="@font/sans"
+                    android:maxLines="1"
+                    android:text="نام پوشه"
+                    android:textColor="@color/TxtcolorHome"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/TxtCount_FavFolder"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:fontFamily="@font/sans"
+                    android:text="۰ عنوان"
+                    android:textColor="@color/TxtcolorHome2"
+                    android:textSize="12sp" />
+            </LinearLayout>
+        </RelativeLayout>
+    </androidx.cardview.widget.CardView>
+</LinearLayout>

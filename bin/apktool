@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Wrapper launcher for ibotpeaches/apktool inside Mymoviebox.
+# Compatible with REA's REA_APKTOOL_COMMAND environment variable.
+
+resolve_script_dir() {
+  local src="${BASH_SOURCE[0]}"
+  while [ -h "$src" ]; do
+    local dir
+    dir="$(cd -P "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="$dir/$src"
+  done
+  cd -P "$(dirname "$src")" && pwd
+}
+
+BIN_DIR="$(resolve_script_dir)"
+REPO_ROOT="$(cd "$BIN_DIR/.." && pwd)"
+
+find_java() {
+  if [ -n "${JAVA_HOME:-}" ] && [ -x "${JAVA_HOME}/bin/java" ]; then
+    printf '%s\n' "${JAVA_HOME}/bin/java"
+    return 0
+  fi
+  if command -v java >/dev/null 2>&1; then
+    command -v java
+    return 0
+  fi
+  return 1
+}
+
+find_jar() {
+  if [ -n "${APKTOOL_JAR:-}" ] && [ -r "${APKTOOL_JAR}" ]; then
+    printf '%s\n' "${APKTOOL_JAR}"
+    return 0
+  fi
+
+  local candidate
+  if [ -r "${REPO_ROOT}/tools/apktool-bin/apktool.jar" ]; then
+    printf '%s\n' "${REPO_ROOT}/tools/apktool-bin/apktool.jar"
+    return 0
+  fi
+
+  candidate="$(ls -1 "${REPO_ROOT}/tools/apktool-bin"/apktool_*.jar 2>/dev/null | sort -V | tail -n 1 || true)"
+  if [ -n "$candidate" ] && [ -r "$candidate" ]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+
+  candidate="$(ls -1 "${REPO_ROOT}/tools/apktool/brut.apktool/apktool-cli/build/libs"/apktool_*.jar 2>/dev/null | grep -vE '(-sources|-javadoc|-all)\.jar$' | sort -V | tail -n 1 || true)"
+  if [ -n "$candidate" ] && [ -r "$candidate" ]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+
+  for candidate in /usr/local/share/apktool/apktool.jar /usr/share/apktool/apktool.jar; do
+    if [ -r "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+JAVA_BIN="$(find_java || true)"
+if [ -z "$JAVA_BIN" ]; then
+  cat >&2 <<EOF
+apktool error: Java runtime ('java') was not found on PATH or under JAVA_HOME.
+Apktool requires Java 8+ to run (and JDK 17+ to build from source).
+Install a JRE/JDK (e.g., OpenJDK 17 or 21), then run:
+  bash "$REPO_ROOT/scripts/install-tools.sh" --download-apktool
+EOF
+  exit 1
+fi
+
+JAR_PATH="$(find_jar || true)"
+if [ -z "$JAR_PATH" ]; then
+  cat >&2 <<EOF
+apktool error: no apktool.jar binary was found.
+Checked:
+  - \$APKTOOL_JAR
+  - $REPO_ROOT/tools/apktool-bin/apktool.jar (or apktool_*.jar)
+  - $REPO_ROOT/tools/apktool/brut.apktool/apktool-cli/build/libs/apktool_*.jar
+Run one of the following on a host with network/JDK access:
+  bash "$REPO_ROOT/scripts/install-tools.sh" --download-apktool
+  bash "$REPO_ROOT/scripts/install-tools.sh" --build-apktool
+EOF
+  exit 1
+fi
+
+javaOpts="-Xmx1024M -Dfile.encoding=utf-8 -Djdk.util.zip.disableZip64ExtraFieldValidation=true"
+while [[ "${1:-}" == -J* ]]; do
+  opt="${1#-J}"
+  javaOpts="${javaOpts} -${opt}"
+  shift
+done
+
+exec "$JAVA_BIN" $javaOpts -jar "$JAR_PATH" "$@"

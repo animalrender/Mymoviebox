@@ -1,0 +1,19 @@
+{
+  "name": "mymoviebox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "APK analysis workspace preconfigured with REA (Reverse Engineer Anything) and Apktool for agent-driven inspection.",
+  "scripts": {
+    "rea": "rea",
+    "rea:doctor": "rea doctor",
+    "rea:capabilities": "rea capabilities",
+    "rea:mcp": "rea --mcp",
+    "rea:mcp:doctor": "rea mcp doctor",
+    "rea:apktool:check": "rea inspect-apktool-client",
+    "setup:tools": "bash scripts/install-tools.sh",
+    "verify:env": "bash scripts/check-env.sh"
+  },
+  "dependencies": {
+    "rea-agents": "6.7.0"
+  }
+}
