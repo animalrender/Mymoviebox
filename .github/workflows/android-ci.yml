@@ -1,0 +1,124 @@
+name: Android APK CI & Emulator Test
+
+on:
+  push:
+    branches:
+      - arena/89e1e39f-mymoviebox
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  smoke-roundtrip-and-emulate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Download verified apktool 3.0.3
+        run: |
+          mkdir -p tools/apktool-bin
+          APKTOOL_VERSION="3.0.3"
+          APKTOOL_SHA256="dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423"
+          curl -fsSL "https://github.com/iBotPeaches/Apktool/releases/download/v${APKTOOL_VERSION}/apktool_${APKTOOL_VERSION}.jar" -o "tools/apktool-bin/apktool_${APKTOOL_VERSION}.jar"
+          echo "${APKTOOL_SHA256}  tools/apktool-bin/apktool_${APKTOOL_VERSION}.jar" | sha256sum -c -
+          ln -sf "apktool_${APKTOOL_VERSION}.jar" tools/apktool-bin/apktool.jar
+
+      - name: Locate Android SDK tools and verify javac/d8/zipalign/apksigner
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          BUILD_TOOLS_DIR="$(ls -1d "$SDK_ROOT"/build-tools/* | sort -V | tail -n 1)"
+          PLATFORM_JAR="$(ls -1 "$SDK_ROOT"/platforms/android-*/android.jar | sort -V | tail -n 1)"
+          echo "BUILD_TOOLS_DIR=$BUILD_TOOLS_DIR" >> "$GITHUB_ENV"
+          echo "ANDROID_JAR=$PLATFORM_JAR" >> "$GITHUB_ENV"
+          echo "Build tools: $BUILD_TOOLS_DIR"
+          echo "Android JAR: $PLATFORM_JAR"
+          ls -la "$BUILD_TOOLS_DIR"
+          "$BUILD_TOOLS_DIR/d8" --version
+          javac -version
+
+      - name: Decode & rebuild base APK with apktool (smoke test)
+        run: |
+          mkdir -p build logs
+          java -Xmx2048m -jar tools/apktool-bin/apktool.jar d -f apks/mymoviebox.apk -o build/decoded 2>&1 | tee logs/apktool-decode.log
+          echo "--- decoded top-level ---"
+          ls -la build/decoded
+          cat build/decoded/apktool.yml
+          echo "--- test javac + d8 smoke class ---"
+          mkdir -p build/smoke-src/com/delfan/madp/favs build/smoke-classes build/smoke-dex
+          cat <<'JAVA' > build/smoke-src/com/delfan/madp/favs/SmokeProbe.java
+          package com.delfan.madp.favs;
+          public class SmokeProbe {
+              public static String ping() { return "ok"; }
+          }
+          JAVA
+          javac -source 1.8 -target 1.8 -cp "$ANDROID_JAR" -d build/smoke-classes build/smoke-src/com/delfan/madp/favs/SmokeProbe.java
+          "$BUILD_TOOLS_DIR/d8" --min-api 21 --output build/smoke-dex $(find build/smoke-classes -name '*.class')
+          ls -la build/smoke-dex
+          echo "--- rebuild apktool ---"
+          java -Xmx2048m -jar tools/apktool-bin/apktool.jar b build/decoded -o build/rebuilt-unsigned.apk 2>&1 | tee logs/apktool-build.log
+          "$BUILD_TOOLS_DIR/zipalign" -f -p 4 build/rebuilt-unsigned.apk build/rebuilt-aligned.apk
+          keytool -genkeypair -v -keystore build/smoke.jks -alias smoke \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=MymovieboxSmoke, OU=CI, O=Mymoviebox, L=Unknown, S=Unknown, C=US"
+          "$BUILD_TOOLS_DIR/apksigner" sign \
+            --ks build/smoke.jks --ks-key-alias smoke \
+            --ks-pass pass:android --key-pass pass:android \
+            --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+            --out build/rebuilt-signed.apk build/rebuilt-aligned.apk
+          "$BUILD_TOOLS_DIR/apksigner" verify --verbose build/rebuilt-signed.apk
+
+      - name: Check KVM availability
+        run: |
+          ls -la /dev/kvm || echo "NO_KVM"
+
+      - name: Enable KVM permissions
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -la /dev/kvm || true
+
+      - name: Run rebuilt APK on Android Emulator & capture smoke screenshots
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          disable-animations: true
+          script: |
+            mkdir -p screenshots logs
+            adb logcat -c
+            adb install -r -g build/rebuilt-signed.apk 2>&1 | tee logs/adb-install.log
+            adb shell am start -n com.delfan.manNn/com.delfan.madp.Acts.activity_splash
+            sleep 10
+            adb exec-out screencap -p > screenshots/01-splash-after-10s.png
+            adb shell dumpsys window windows | grep -E "mCurrentFocus|mFocusedApp" > logs/window-focus.txt || true
+            adb shell dumpsys activity activities | grep -E "ResumedActivity|topResumedActivity|Hist " | head -n 30 >> logs/window-focus.txt || true
+            # Also capture current logcat around app startup/errors
+            adb logcat -d -t 400 > logs/logcat-smoke.txt || true
+            cat logs/window-focus.txt
+            tail -n 80 logs/logcat-smoke.txt
+
+      - name: Upload smoke logs & screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-emulator-artifacts
+          path: |
+            screenshots/
+            logs/
+          retention-days: 7

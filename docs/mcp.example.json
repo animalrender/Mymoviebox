@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "rea": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "rea-agents@6.7.0",
+        "--mcp"
+      ],
+      "env": {
+        "REA_APKTOOL_COMMAND": "/ABSOLUTE/PATH/TO/Mymoviebox/bin/apktool"
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+
+# Local downloaded/built binaries & optional upstream source clones
+tools/apktool-bin/
+tools/rea-src/
+
+# APK inputs and analysis outputs (keep binaries & evidence out of Git, except base input APK for CI)
+apks/*
+!apks/.gitkeep
+!apks/mymoviebox.apk
+analysis-output/*
+!analysis-output/.gitkeep
+evidence/*
+!evidence/.gitkeep
+
+# Build / CI / signing scratch outputs
+build/
+dist/
+screenshots/
+logs/
+*.keystore
+*.jks
+
+# Local environment overrides
+.env
+.env.local
+*.log
+.DS_Store
