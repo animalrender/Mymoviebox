@@ -142,10 +142,14 @@ def enter_text_in_field(node, value: str):
 
 def launch_and_dismiss_to_main():
     adb("shell", "am", "start", "-W", "-n", f"{PKG}/com.delfan.madp.Acts.activity_splash")
-    deadline = time.time() + 25.0
+    deadline = time.time() + 45.0
     while time.time() < deadline:
         try:
             root = dump_ui()
+            retry_btn = find_node(root, resource_id="LinRload_ActSplash") or find_node(root, text="بارگذاری مجدد")
+            if retry_btn is not None:
+                tap_node(retry_btn, "retry splash connection", wait=3.0)
+                continue
             ok_btn = (
                 find_node(root, resource_id="PopupShowMsgVW_BtnOk")
                 or find_node(root, resource_id="PopupShowMsg_BtnOk")
@@ -233,6 +237,8 @@ def main():
 
     try:
         adb("logcat", "-c", check=False)
+        adb("shell", "svc", "wifi", "enable", check=False)
+        adb("shell", "svc", "data", "enable", check=False)
         adb("shell", "pm", "uninstall", PKG, check=False)
 
         step("1. Install patched signed APK")
