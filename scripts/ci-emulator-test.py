@@ -4,6 +4,7 @@ import re
 import subprocess
 import sys
 import time
+import traceback
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -164,16 +165,20 @@ def main():
     scr_dir.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
 
+    log_lines = []
     report = []
 
+    def log(msg):
+        print(msg, flush=True)
+        log_lines.append(msg)
+
     def step(msg):
-        print(f"\n=== {msg} ===")
+        log(f"\n=== {msg} ===")
         report.append(f"[PASS-START] {msg}")
 
-    adb("logcat", "-c")
-    adb("shell", "pm", "uninstall", PKG, check=False)
-
     try:
+        adb("logcat", "-c", check=False)
+        adb("shell", "pm", "uninstall", PKG, check=False)
         step("1. Install patched signed APK")
         install_out = adb("install", "-r", "-g", args.apk)
         (log_dir / "adb-install.log").write_text(install_out, encoding="utf-8")
@@ -376,6 +381,8 @@ def main():
         (log_dir / "e2e-summary.txt").write_text("\n".join(report) + "\nALL CHECKS PASSED\n", encoding="utf-8")
         print("\nALL E2E EMULATOR CHECKS PASSED!")
     except Exception as exc:
+        log(f"\n[FAIL] {exc}")
+        log(traceback.format_exc())
         report.append(f"[FAIL] {exc}")
         (log_dir / "e2e-summary.txt").write_text("\n".join(report) + "\n", encoding="utf-8")
         try:
@@ -389,6 +396,10 @@ def main():
             pass
         raise
     finally:
+        try:
+            (log_dir / "e2e-stdout.log").write_text("\n".join(log_lines) + "\n", encoding="utf-8")
+        except Exception:
+            pass
         try:
             focus = adb("shell", "dumpsys", "window", "windows", check=False)
             focus_lines = [l for l in focus.splitlines() if "mCurrentFocus" in l or "mFocusedApp" in l]

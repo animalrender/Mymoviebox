@@ -82,10 +82,7 @@ jobs:
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           disable-animations: true
           script: |
-            python3 scripts/ci-emulator-test.py \
-              --apk dist/mymoviebox-offline-favs-v9-universal.apk \
-              --screenshots screenshots \
-              --logs logs
+            python3 scripts/ci-emulator-test.py --apk dist/mymoviebox-offline-favs-v9-universal.apk --screenshots screenshots --logs logs
 
       - name: Upload built APKs
         if: always()
@@ -160,7 +157,9 @@ jobs:
 
           text_parts = []
           for label, p in [
+              ("e2e-stdout.log", Path("logs/e2e-stdout.log")),
               ("window-focus.txt", Path("logs/window-focus.txt")),
+              ("uidump_fail.xml", Path("logs/uidump_fail.xml")),
               ("offline_favorites_v1.xml", Path("logs/offline_favorites_v1.xml")),
               ("patch-build.log", Path("logs/patch-build.log")),
           ]:
