@@ -1,126 +1,95 @@
-# Mymoviebox
+# Mymoviebox — Offline Favorites & Folders Patch
 
-An Android APK inspection and analysis workspace preconfigured with:
-
-1. **REA (`morluto/rea` / `rea-agents`)** — CLI and MCP server for agent-driven static and runtime analysis across Android APKs, archives, native binaries, JavaScript bundles, and Flutter/Dart artifacts.
-2. **Apktool (`ibotpeaches/apktool`)** — Android APK resource/manifest decoder and smali/resource rebuilder, checked out at `tools/apktool` and wrapped by `bin/apktool` for both standalone use and REA's `decode-android-resources` / `decode_android_resources` workflow.
+Android APK patch, reproducible build pipeline, and automated API 33 emulator E2E verification suite adding **100% offline Favorites, custom collections/folders, and JSON backup/restore** to `com.delfan.manNn` (`v9`, base APK `apks/mymoviebox.apk`).
 
 ---
 
-## What Is Installed Right Now
+## Features Implemented
 
-| Component | Location | Status | Notes |
-| --- | --- | --- | --- |
-| **REA (`rea-agents` v6.7.0)** | `node_modules/.bin/rea` (and global `rea` in this sandbox) | **Ready** | 153 CLI commands, 207 MCP tools, 6 MCP prompts (`rea mcp doctor` passes). Compatible with Node.js `v22.22.3` (`^22.19.0 \|\| ^24.11.0 \|\| >=26.0.0`). |
-| **REA Agent Skill** | `.agents/skills/reverse-engineer-anything/` | **Ready** | Official `reverse-engineer-anything` skill & references synced from `rea-agents@6.7.0`. |
-| **Apktool Source Repo** | `tools/apktool/` (git submodule -> `ibotpeaches/apktool`) | **Checked out** | Shallow clone at commit `fbaeb47` (`3.1.0-SNAPSHOT` / `main`), including upstream launcher scripts under `tools/apktool/scripts/`. |
-| **Apktool Wrapper** | `bin/apktool` | **Ready** | Resolves `java` + `apktool.jar` (from `tools/apktool-bin/` or Gradle build outputs) and works as `REA_APKTOOL_COMMAND`. |
-| **Java Runtime / `apktool.jar`** | `tools/apktool-bin/apktool.jar` | **Host prerequisite** | Not present in this sandbox (no `java` installed and GitHub release CDN / Maven Central are outside the sandbox's outbound allowlist). See [Environment & Troubleshooting](docs/environment-and-troubleshooting.md). |
+1. **Zero-Login Offline Favorites (`BtnAddFave_ADV` on Details Screen)**
+   - Works offline and without user login (`Other/b.g`, `Other/b.s` are no longer required).
+   - Replaces `@string/Txt356` with clean Persian label **`افزودن به علاقه‌مندی`** (`در علاقه‌مندی‌ها (N)` when saved).
+   - Reveals `BtnAddFave_ADV` immediately in `activity_detials_video.onCreate` and keeps it responsive even before/without network completion, prefilling saved description, release year, and IMDb rating when viewing a saved item offline.
 
-Verify your current environment at any time:
+2. **Collections / Folders Modal (`dialog_fav_collections.xml` + `FavCollectionsDialog`)**
+   - Tapping the Details favorite button opens a bottom/center modal dialog allowing multi-folder assignment (`CheckBox` per folder), inline new folder creation (**ایجاد**), saving (**ذخیره علاقه‌مندی**), or removing (**حذف**).
 
-```bash
-npm run verify:env
-# or
-bash scripts/check-env.sh
-```
+3. **Offline Favorites Tab (`fr_favs.xml` + `OfflineFavsController` + `FolderAdapter`)**
+   - Removes the login wall (`FrLayoutLogin_Frg5` hidden) and adds four RTL tabs matching the app's native light/night palette (`Other/b.r`, `Other/g.{o,m,p}`):
+     - **همه** (All saved movies & series)
+     - **سینمایی** (Movies)
+     - **سریال** (Series)
+     - **پوشه‌ها** (Custom folders with item counts, inline create/rename/delete, and folder drill-down view)
+   - Clicking any saved card opens `activity_detials_video` directly with offline fallback metadata.
 
----
-
-## Quick Start: Using With This Agent (or Any Coding Agent)
-
-### 1. Supply your APK
-
-Place your `.apk` inside `apks/` (gitignored for `*.apk`, `*.apks`, `*.xapk`, `*.aab` so binaries are not committed to Git):
-
-```text
-apks/your-app.apk
-```
-
-In this Arena chat, you can upload/attach the APK into `apks/` (or ask the agent to pull it from your connected Google Drive if you want to use Drive) and tell the agent what you want to investigate.
-
-### 2. Ask the agent what to inspect
-
-Examples of prompts you can give right away:
-
-- *"Inspect `apks/app.apk` with `rea inspect-artifact` and summarize the package layout, DEX files, native `.so` libraries, and assets."*
-- *"Check whether `apks/app.apk` is a Flutter app using `rea identify-flutter-build`."*
-- *"Extract `apks/app.apk` safely into `analysis-output/app/` and inspect any embedded JS bundles or native libraries."*
-- *"Using Apktool (`REA_APKTOOL_COMMAND=$PWD/bin/apktool`), decode `apks/app.apk` resources and list the `AndroidManifest.xml`, permissions, and localized string tables."* *(requires Java + `apktool.jar`)*
-- *"Decompile class `com.example.MainActivity` in `apks/app.apk` using REA."* *(requires Java 17+ and `REA_JADX_MCP_JAR`)*
-
-For complete agent workflows, MCP setup across Claude Code / Codex / Cursor / OpenCode / VS Code / Gemini CLI, and prompt patterns, see:
-
-- **[Agent Usage Guide](docs/agent-usage.md)**
-- **[Apktool Guide](docs/apktool-guide.md)**
-- **[Environment & Troubleshooting](docs/environment-and-troubleshooting.md)**
-- **[AGENTS.md](AGENTS.md)** (automatic instructions for coding agents)
+4. **Backup Export & Import (Android SAF)**
+   - **خروجی** (`ACTION_CREATE_DOCUMENT`): exports a versioned JSON snapshot (`mymoviebox-favorites.json`, schema v1) containing all folders and saved items.
+   - **ورودی** (`ACTION_OPEN_DOCUMENT`): imports and merges folders/items safely without losing existing local entries.
+   - Persists synchronously in `SharedPreferences("offline_favorites_v1")` across app restarts (`am force-stop`).
 
 ---
 
-## Workstation Setup (Full Apktool + Optional JADX / Latest REA)
-
-If you clone this repository on your own machine (Linux/macOS) with JDK 17+ and unrestricted network access:
-
-```bash
-# 1. Install npm dependencies & initialize tools/apktool
-npm install
-git submodule update --init --depth 1 tools/apktool
-
-# 2. Download verified official apktool_3.0.3.jar (SHA-256 checked)
-bash scripts/install-tools.sh --download-apktool
-# OR build Apktool from source in tools/apktool (requires JDK 17+)
-bash scripts/install-tools.sh --build-apktool
-
-# 3. Point REA to the repo's Apktool wrapper
-export REA_APKTOOL_COMMAND="$PWD/bin/apktool"
-
-# 4. Verify everything
-npm run verify:env
-```
-
-Optional upgrades on a workstation with **Node.js `^22.23.4 || ^24.22.1 || >=26.12.1`**:
-
-```bash
-# Upgrade rea-agents to @latest (adds inspect-apk-signature, guided-workflows CLI, etc.)
-bash scripts/install-tools.sh --upgrade-rea-latest
-
-# Optionally clone the full morluto/rea source repository into tools/rea-src (gitignored)
-bash scripts/install-tools.sh --with-rea-source
-```
-
----
-
-## Repository Layout
+## Repository Structure
 
 ```text
 Mymoviebox/
-├── AGENTS.md                           # Instructions for AI coding agents working in this repo
-├── CLAUDE.md                           # Entry pointer for Claude Code
-├── README.md                           # Project overview & quick start
-├── package.json                        # Pins rea-agents + helper npm scripts
-├── bin/
-│   └── apktool                         # Wrapper script (compatible with REA_APKTOOL_COMMAND)
+├── apks/
+│   └── mymoviebox.apk                  # Base APK (com.delfan.manNn v9)
+├── patches/
+│   ├── res/
+│   │   ├── drawable/                   # Toolbar pill bg, folder badge bg, vector icons
+│   │   └── layout/                     # Patched fr_favs.xml, item_fav_folder.xml, dialog_fav_collections.xml
+│   ├── src/com/delfan/madp/favs/       # Runtime Java module compiled into classes8.dex
+│   └── stubs/                          # Compile-only stubs matching original APK DEX signatures (incl. i.d)
 ├── scripts/
-│   ├── install-tools.sh                # Workstation installer for rea-agents & apktool.jar
-│   └── check-env.sh                    # Checks Node, Java, REA CLI/MCP, Apktool, JADX, ps
-├── docs/
-│   ├── agent-usage.md                  # How to use REA + Apktool via AI agents (CLI & MCP)
-│   ├── apktool-guide.md                # Apktool standalone & REA resource decoding guide
-│   ├── environment-and-troubleshooting.md
-│   └── mcp.example.json                # Sample MCP server configuration
-├── .agents/skills/
-│   └── reverse-engineer-anything/      # Bundled REA agent skill & reference docs
-├── tools/
-│   ├── apktool/                        # Git submodule -> https://github.com/ibotpeaches/apktool
-│   └── apktool-bin/                    # Gitignored location for apktool.jar
-├── apks/                               # Gitignored directory for local APK inputs
-├── analysis-output/                    # Gitignored directory for extracted artifacts
-└── evidence/                           # Gitignored directory for saved REA Evidence JSON
+│   ├── patch-apk.py                    # Decodes APK, compiles classes8.dex, patches smali/res, aligns & signs APKs
+│   ├── ci-emulator-test.py             # End-to-end adb/uiautomator emulator test suite (including offline & SAF)
+│   ├── install-tools.sh                # Workstation installer for rea-agents & verified apktool 3.0.3
+│   └── check-env.sh                    # Checks local environment tools
+├── .github/workflows/
+│   └── android-ci.yml                  # CI build + KVM API 33 emulator E2E + artifact/Check Run + GitHub Release
+└── docs/                               # REA & Apktool reference documentation
 ```
 
 ---
 
-## Responsible Use
+## Reproducible Build
 
-Both `morluto/rea` (MIT) and `ibotpeaches/apktool` (Apache-2.0) are intended solely for lawful software analysis, debugging, interoperability, security auditing of software you own or are authorized to inspect, and educational research.
+Requires **JDK 17+**, **Android SDK Build-Tools** (`d8`, `zipalign`, `apksigner`), and verified **Apktool 3.0.3** (`scripts/install-tools.sh --download-apktool`):
+
+```bash
+python3 scripts/patch-apk.py \
+  --input apks/mymoviebox.apk \
+  --work build/patch-work \
+  --out dist \
+  --apktool tools/apktool-bin/apktool.jar \
+  --abis universal,arm64-v8a,armeabi-v7a,x86_64,x86 \
+  --version-label v9
+```
+
+Optional release keystore flags: `--keystore path.jks --ks-pass ... --ks-alias ... --key-pass ...` (or set `ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASS` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASS` in GitHub Actions Secrets). When omitted, a deterministic local/CI debug signing keystore is generated under `build/` (excluded from Git).
+
+Outputs under `dist/`:
+- `mymoviebox-offline-favs-v9-universal.apk`
+- `mymoviebox-offline-favs-v9-arm64-v8a.apk`
+- `mymoviebox-offline-favs-v9-armeabi-v7a.apk`
+- `mymoviebox-offline-favs-v9-x86_64.apk`
+- `mymoviebox-offline-favs-v9-x86.apk`
+- `SHA256SUMS.txt` & `build-manifest.json`
+
+---
+
+## Automated CI & API 33 Emulator Verification
+
+`.github/workflows/android-ci.yml` automatically builds all 5 signed APKs on every push and executes `scripts/ci-emulator-test.py` on a hardware-accelerated (`KVM`) API 33 Android emulator:
+
+1. Fresh APK install & launch (`activity_splash` -> `activity_main`)
+2. Offline Favorites empty state verification without any login dialog
+3. Live movie & series Details inspection (`افزودن به علاقه‌مندی`, absence of `@string/Txt356` credit string)
+4. Multi-folder creation, assignment, and removal via modal dialog
+5. Verification of all 4 Favorites tabs (**همه / سینمایی / سریال / پوشه‌ها**), folder drill-down, and rename
+6. Storage Access Framework (**خروجی / ورودی**) JSON export -> delete item -> import restore
+7. Process kill persistence (`am force-stop`) and offline Details view with Wi-Fi + mobile data disabled
+8. Logcat check confirming zero fatal runtime/Dalvik/resource exceptions
+
+Trigger a tagged release directly from GitHub Actions (`workflow_dispatch` with `release_tag` input, e.g. `v9-offline-favs-1`) or push a `v*` tag to attach all verified APKs and `SHA256SUMS.txt` to a GitHub Release.
