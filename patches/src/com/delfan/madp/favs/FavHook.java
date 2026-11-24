@@ -32,8 +32,14 @@ public final class FavHook {
         try {
             View v = act.findViewById(Res.id(act, idName));
             if (v instanceof TextView) {
-                CharSequence cur = ((TextView) v).getText();
-                if (cur == null || cur.toString().trim().isEmpty()) {
+                CharSequence cs = ((TextView) v).getText();
+                String cur = cs == null ? "" : cs.toString().trim();
+                if (cur.isEmpty()
+                        || cur.equals("...")
+                        || cur.equals("در حال دریافت")
+                        || cur.equals("IMDB :")
+                        || cur.equals("IMDB:")
+                        || cur.equals("سال :")) {
                     ((TextView) v).setText(value.trim());
                 }
             }

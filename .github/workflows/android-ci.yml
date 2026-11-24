@@ -1,30 +1,166 @@
-name: Android APK CI, E2E Emulator & Release
+name: Android APK CI, E2E Emulator & Auto-Release
 
 on:
   push:
     branches:
-      - arena/89e1e39f-mymoviebox
+      - main
+      - 'arena/**'
     tags:
       - 'v*'
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Optional release tag (e.g. v9-offline-favs-1) to publish GitHub Release assets'
+        description: 'Optional explicit release tag (e.g. v1.0.0). Leave empty on main to auto-increment.'
         required: false
         default: ''
+      bump:
+        description: 'Auto-version bump type (patch, minor, major)'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 permissions:
   contents: write
   checks: write
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
   build-and-emulate:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          tags: true
+
+      - name: Determine version & release mode
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_SHA: ${{ github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.release_tag }}
+          INPUT_BUMP: ${{ inputs.bump }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import urllib.request
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          ref = os.environ["GITHUB_REF"]
+          ref_name = os.environ["GITHUB_REF_NAME"]
+          sha = os.environ["GITHUB_SHA"]
+          event = os.environ["EVENT_NAME"]
+          input_tag = os.environ.get("INPUT_TAG", "").strip()
+          input_bump = (os.environ.get("INPUT_BUMP", "") or "patch").strip().lower()
+          token = os.environ["GH_TOKEN"]
+
+          def semver_parse(tag: str):
+              m = re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", tag.strip())
+              if not m:
+                  return None
+              return tuple(int(x) for x in m.groups())
+
+          def fetch_existing_tags():
+              tags = set()
+              out = subprocess.check_output(["git", "tag", "-l"], text=True)
+              for line in out.splitlines():
+                  if line.strip():
+                      tags.add(line.strip())
+              try:
+                  req = urllib.request.Request(
+                      f"https://api.github.com/repos/{repo}/releases?per_page=100",
+                      headers={
+                          "Authorization": f"Bearer {token}",
+                          "Accept": "application/vnd.github+json",
+                      },
+                  )
+                  with urllib.request.urlopen(req, timeout=20) as resp:
+                      for rel in json.loads(resp.read().decode("utf-8")):
+                          tn = (rel.get("tag_name") or "").strip()
+                          if tn:
+                              tags.add(tn)
+              except Exception as exc:
+                  print(f"Warning: could not list releases via API: {exc}")
+              return tags
+
+          head_tags = [
+              t.strip()
+              for t in subprocess.check_output(["git", "tag", "--points-at", sha], text=True).splitlines()
+              if semver_parse(t.strip()) is not None
+          ]
+          head_tags.sort(key=lambda t: semver_parse(t), reverse=True)
+
+          commit_msg = subprocess.check_output(["git", "log", "-1", "--pretty=%B", sha], text=True)
+          bump_kind = input_bump
+          if "[major]" in commit_msg:
+              bump_kind = "major"
+          elif "[minor]" in commit_msg:
+              bump_kind = "minor"
+
+          should_release = False
+          release_tag = ""
+          version_label = f"ci-{sha[:7]}"
+          prev_tag = ""
+
+          all_semver = sorted(
+              (t for t in fetch_existing_tags() if semver_parse(t) is not None),
+              key=lambda t: semver_parse(t),
+          )
+          if all_semver:
+              prev_tag = all_semver[-1]
+
+          if ref.startswith("refs/tags/"):
+              should_release = True
+              release_tag = ref_name
+              version_label = ref_name
+          elif event == "workflow_dispatch" and input_tag:
+              should_release = True
+              release_tag = input_tag
+              version_label = input_tag
+          elif ref == "refs/heads/main":
+              should_release = True
+              if head_tags:
+                  release_tag = head_tags[0]
+              elif not all_semver:
+                  release_tag = "v1.0.0"
+              else:
+                  maj, mino, pat = semver_parse(all_semver[-1])
+                  if bump_kind == "major":
+                      release_tag = f"v{maj + 1}.0.0"
+                  elif bump_kind == "minor":
+                      release_tag = f"v{maj}.{mino + 1}.0"
+                  else:
+                      release_tag = f"v{maj}.{mino}.{pat + 1}"
+              version_label = release_tag
+
+          print(f"Resolved version_label={version_label}, should_release={should_release}, release_tag={release_tag}, prev_tag={prev_tag}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"version_label={version_label}\n")
+              fh.write(f"should_release={'true' if should_release else 'false'}\n")
+              fh.write(f"release_tag={release_tag}\n")
+              fh.write(f"prev_tag={prev_tag}\n")
+          PY
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -47,6 +183,7 @@ jobs:
           ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASS: ${{ secrets.ANDROID_KEY_PASS }}
+          VERSION_LABEL: ${{ steps.version.outputs.version_label }}
         run: |
           mkdir -p build dist logs screenshots
           EXTRA_ARGS=""
@@ -60,7 +197,7 @@ jobs:
             --out dist \
             --apktool tools/apktool-bin/apktool.jar \
             --abis universal,arm64-v8a,armeabi-v7a,x86_64,x86 \
-            --version-label v9 \
+            --version-label "$VERSION_LABEL" \
             $EXTRA_ARGS 2>&1 | tee logs/patch-build.log
           ls -lh dist/
           cat dist/SHA256SUMS.txt
@@ -82,7 +219,7 @@ jobs:
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           disable-animations: true
           script: |
-            python3 scripts/ci-emulator-test.py --apk dist/mymoviebox-offline-favs-v9-universal.apk --screenshots screenshots --logs logs
+            python3 scripts/ci-emulator-test.py --apk "dist/mymoviebox-offline-favs-${{ steps.version.outputs.version_label }}-universal.apk" --screenshots screenshots --logs logs
 
       - name: Upload built APKs
         if: always()
@@ -169,7 +306,7 @@ jobs:
           lc = Path("logs/logcat-e2e.txt")
           if lc.is_file():
               lines = [
-                  l for l in lc.read_text(encoding="utf-8", errors="replace").splitlines()
+                  l for l in lc.read_text(encoding="utf-8", errors='replace').splitlines()
                   if any(k in l for k in ("com.delfan", "AndroidRuntime", "favs", "FATAL", "Exception", "Error"))
               ]
               text_parts.append("## Filtered Logcat\n```\n" + "\n".join(lines[-250:]) + "\n```\n")
@@ -193,31 +330,48 @@ jobs:
           print("Check run published with", len(blob_entries), "screenshot blobs.")
           PY
 
-      - name: Publish GitHub Release (on tag or manual release_tag dispatch)
-        if: ${{ success() && (startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')) }}
+      - name: Publish auto-versioned GitHub Release
+        if: ${{ success() && steps.version.outputs.should_release == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_tag }}
+          TAG_NAME: ${{ steps.version.outputs.release_tag }}
+          PREV_TAG: ${{ steps.version.outputs.prev_tag }}
+          TARGET_SHA: ${{ github.sha }}
         run: |
+          if ! git rev-parse -q --verify "refs/tags/${TAG_NAME}" >/dev/null 2>&1; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG_NAME" "$TARGET_SHA" -m "Release $TAG_NAME"
+            git push origin "refs/tags/${TAG_NAME}"
+          fi
+
+          NOTES_FILE="build/release-notes.md"
+          {
+            echo "## Mymoviebox — Offline Favorites & Folders ($TAG_NAME)"
+            echo ""
+            echo "- 100% offline Favorites without login required"
+            echo "- Details modal folder picker (**همه / سینمایی / سریال / پوشه‌ها** tabs, create/rename/delete folders)"
+            echo "- JSON Backup Export & Restore via Android Storage Access Framework"
+            echo "- Pure Dalvik APK signed with v1/v2/v3; both \`universal\` and per-ABI packages included"
+            echo "- Verified on Android API 33 emulator E2E suite (commit \`${TARGET_SHA}\`)"
+            if [ -n "${PREV_TAG:-}" ] && [ "${PREV_TAG}" != "${TAG_NAME}" ]; then
+              echo ""
+              echo "### Changes since \`${PREV_TAG}\`"
+              git log "${PREV_TAG}..${TARGET_SHA}" --oneline --no-decorate | head -n 50 | sed 's/^/- /'
+            fi
+            echo ""
+            echo "### SHA-256 Checksums"
+            echo '```'
+            cat dist/SHA256SUMS.txt
+            echo '```'
+          } > "$NOTES_FILE"
+
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             gh release upload "$TAG_NAME" dist/*.apk dist/SHA256SUMS.txt dist/build-manifest.json --clobber
           else
             gh release create "$TAG_NAME" \
               dist/*.apk dist/SHA256SUMS.txt dist/build-manifest.json \
-              --target "${{ github.sha }}" \
-              --title "Mymoviebox Offline Favorites ($TAG_NAME)" \
-              --notes-file <(
-                echo "## Mymoviebox v9 — Offline Favorites & Folders Edition"
-                echo ""
-                echo "- 100% offline Favorites without login required"
-                echo "- Favorites tab with **All / Movies / Series / Folders** (همه / سینمایی / سریال / پوشه‌ها)"
-                echo "- Create, rename, and delete custom collections/folders"
-                echo "- JSON Backup Export & Restore via Android Storage Access Framework"
-                echo "- Pure Dalvik APK signed with v1/v2/v3; both \`universal\` and per-ABI packages included"
-                echo ""
-                echo "### SHA-256 Checksums"
-                echo '```'
-                cat dist/SHA256SUMS.txt
-                echo '```'
-              )
+              --target "$TARGET_SHA" \
+              --title "Mymoviebox Offline Favorites $TAG_NAME" \
+              --notes-file "$NOTES_FILE"
           fi

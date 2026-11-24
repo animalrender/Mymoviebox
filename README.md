@@ -79,9 +79,9 @@ Outputs under `dist/`:
 
 ---
 
-## Automated CI & API 33 Emulator Verification
+## Automated CI, Versioning & API 33 Emulator Verification
 
-`.github/workflows/android-ci.yml` automatically builds all 5 signed APKs on every push and executes `scripts/ci-emulator-test.py` on a hardware-accelerated (`KVM`) API 33 Android emulator:
+`.github/workflows/android-ci.yml` automatically builds all 5 signed APKs on every push/PR and runs `scripts/ci-emulator-test.py` on a hardware-accelerated (`KVM`) API 33 Android emulator:
 
 1. Fresh APK install & launch (`activity_splash` -> `activity_main`)
 2. Offline Favorites empty state verification without any login dialog
@@ -92,4 +92,4 @@ Outputs under `dist/`:
 7. Process kill persistence (`am force-stop`) and offline Details view with Wi-Fi + mobile data disabled
 8. Logcat check confirming zero fatal runtime/Dalvik/resource exceptions
 
-Trigger a tagged release directly from GitHub Actions (`workflow_dispatch` with `release_tag` input, e.g. `v9-offline-favs-1`) or push a `v*` tag to attach all verified APKs and `SHA256SUMS.txt` to a GitHub Release.
+Every change merged or pushed to `main` automatically tags and publishes a new GitHub Release starting at **`v1.0.0`** and incrementing semantic patch versions (`v1.0.1`, `v1.0.2`, ...; include `[minor]` or `[major]` in a commit message to bump minor/major) with all 5 verified APKs (`universal` + per-ABI) and `SHA256SUMS.txt` attached.
