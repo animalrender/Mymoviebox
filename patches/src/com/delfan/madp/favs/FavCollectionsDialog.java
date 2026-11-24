@@ -126,7 +126,8 @@ public final class FavCollectionsDialog {
                 @Override
                 public void onClick(View v) {
                     ArrayList<String> list = new ArrayList<String>(selectedFolderIds);
-                    OfflineFavStore.saveFavorite(act, currentItem, list);
+                    FavItem toSave = FavHook.mergeWithLatestLoaded(currentItem);
+                    OfflineFavStore.saveFavorite(act, toSave, list);
                     Toast.makeText(
                             act,
                             alreadyFav ? "تغییرات علاقه‌مندی ذخیره شد" : "به لیست علاقه‌مندی‌های آفلاین اضافه شد",

@@ -199,6 +199,31 @@ def card_title(card_node) -> str:
     return ""
 
 
+def wait_for_details_loaded(timeout=15.0):
+    deadline = time.time() + timeout
+    last_root = None
+    while time.time() < deadline:
+        try:
+            root = dump_ui()
+            last_root = root
+            btn = find_node(root, resource_id="BtnAddFave_ADV")
+            des = find_node(root, resource_id="TxtDes_ActDetialsVideo")
+            des_txt = des.attrib.get("text", "").strip() if des is not None else ""
+            if btn is not None and len(des_txt) > 5 and des_txt != "..." and "در حال دریافت" not in des_txt:
+                time.sleep(0.3)
+                fresh_root = dump_ui()
+                fresh_btn = find_node(fresh_root, resource_id="BtnAddFave_ADV") or btn
+                return fresh_root, fresh_btn
+        except Exception:
+            pass
+        time.sleep(0.8)
+    if last_root is not None:
+        btn = find_node(last_root, resource_id="BtnAddFave_ADV")
+        if btn is not None:
+            return last_root, btn
+    raise AssertionError("Timed out waiting for Details page to load")
+
+
 def open_media_card(tab_label: str, index: int = 0) -> str:
     tap_bottom_tab(tab_label)
     # Wait up to 20s for RecyclerView items from server
@@ -272,12 +297,12 @@ def main():
         step("3. Open real Movie #1 -> verify clean string & offline favorite button visible")
         movie1_title = open_media_card("سینمایی", 0)
         log(f"  Opened Movie #1: {movie1_title}")
-        root, btn_fav = wait_for_node(timeout=12.0, resource_id="BtnAddFave_ADV")
+        root, btn_fav = wait_for_details_loaded(timeout=15.0)
         assert_text_absent(root, "Mahroid")
         txt_btn = find_node(root, resource_id="TxtBtnFave_ADV")
         if txt_btn is None or "افزودن به علاقه‌مندی" not in txt_btn.attrib.get("text", ""):
             raise AssertionError(f"Unexpected initial button text: {txt_btn.attrib if txt_btn is not None else None}")
-        des_node = find_node(root, resource_id="TxtDes_ADV")
+        des_node = find_node(root, resource_id="TxtDes_ActDetialsVideo")
         movie1_des_snippet = ""
         if des_node is not None:
             raw_des = des_node.attrib.get("text", "").strip()
@@ -310,7 +335,7 @@ def main():
         step("5. Save real Movie #2 into Weekend + Sci-Fi & real Series #1 without folder")
         movie2_title = open_media_card("سینمایی", 1)
         log(f"  Opened Movie #2: {movie2_title}")
-        root, btn_fav = wait_for_node(timeout=12.0, resource_id="BtnAddFave_ADV")
+        root, btn_fav = wait_for_details_loaded(timeout=15.0)
         tap_node(btn_fav, "BtnAddFave_ADV")
         root, _ = wait_for_node(timeout=6.0, resource_id="BtnSaveFav_FavDlg")
         tap_node(find_node(root, text="Weekend"), "check Weekend")
@@ -325,7 +350,7 @@ def main():
 
         series1_title = open_media_card("سریال", 0)
         log(f"  Opened Series #1: {series1_title}")
-        root, btn_fav = wait_for_node(timeout=12.0, resource_id="BtnAddFave_ADV")
+        root, btn_fav = wait_for_details_loaded(timeout=15.0)
         tap_node(btn_fav, "BtnAddFave_ADV")
         root, btn_save = wait_for_node(timeout=6.0, resource_id="BtnSaveFav_FavDlg")
         tap_node(btn_save, "BtnSaveFav_FavDlg", wait=1.0)
