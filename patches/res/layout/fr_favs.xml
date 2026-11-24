@@ -1,0 +1,539 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/BgAct">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:background="@color/colorPrimary"
+            android:paddingLeft="8dp"
+            android:paddingRight="4dp">
+
+            <LinearLayout
+                android:id="@+id/LinExportImport_Frg5"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_alignParentLeft="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:id="@+id/BtnExport_Frg5"
+                    android:layout_width="wrap_content"
+                    android:layout_height="30dp"
+                    android:layout_marginRight="6dp"
+                    android:background="@drawable/fav_toolbar_btn_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="horizontal"
+                    android:paddingLeft="8dp"
+                    android:paddingRight="8dp">
+
+                    <ImageView
+                        android:layout_width="15dp"
+                        android:layout_height="15dp"
+                        android:layout_marginRight="4dp"
+                        android:src="@drawable/ic_fav_export" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/sans"
+                        android:text="خروجی"
+                        android:textColor="@color/ToolbatText"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/BtnImport_Frg5"
+                    android:layout_width="wrap_content"
+                    android:layout_height="30dp"
+                    android:background="@drawable/fav_toolbar_btn_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:orientation="horizontal"
+                    android:paddingLeft="8dp"
+                    android:paddingRight="8dp">
+
+                    <ImageView
+                        android:layout_width="15dp"
+                        android:layout_height="15dp"
+                        android:layout_marginRight="4dp"
+                        android:src="@drawable/ic_fav_import" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/sans"
+                        android:text="ورودی"
+                        android:textColor="@color/ToolbatText"
+                        android:textSize="11sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/TxtTitle_ToolBar_Frg5"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_centerVertical="true"
+                android:layout_marginRight="6dp"
+                android:layout_toLeftOf="@id/RelIcMenu_ToolBar_Frg5"
+                android:fontFamily="@font/sans"
+                android:text="علاقه‌مندی‌ها"
+                android:textColor="@color/ToolbatText"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <RelativeLayout
+                android:id="@+id/RelIcMenu_ToolBar_Frg5"
+                android:layout_width="35dp"
+                android:layout_height="match_parent"
+                android:layout_alignParentRight="true"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center">
+
+                <ImageView
+                    android:layout_width="25dp"
+                    android:layout_height="25dp"
+                    android:src="@drawable/ic_menu_dr" />
+            </RelativeLayout>
+        </RelativeLayout>
+
+        <FrameLayout
+            android:id="@+id/FrLayoutLogin_Frg5"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone">
+
+            <include
+                layout="@layout/include_show_msg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:id="@+id/TabFolders_Frg5"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@color/BgTabTextView"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:id="@+id/TabFoldersTxt_Frg5"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:background="@color/BgTabTextView"
+                    android:fontFamily="@font/sans"
+                    android:gravity="center"
+                    android:text="پوشه‌ها"
+                    android:textColor="@color/BgTabText"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="match_parent"
+                android:background="@color/ViewHBtnC" />
+
+            <LinearLayout
+                android:id="@+id/TabB_Frg5"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@color/BgTabTextView"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:id="@+id/TabBTxt_Frg5"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:background="@color/BgTabTextView"
+                    android:fontFamily="@font/sans"
+                    android:gravity="center"
+                    android:text="سریال"
+                    android:textColor="@color/BgTabText"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="match_parent"
+                android:background="@color/ViewHBtnC" />
+
+            <LinearLayout
+                android:id="@+id/TabFaraB_Frg5"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@color/BgTabTextView"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:id="@+id/TabFaraBTxt_Frg5"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:background="@color/BgTabTextView"
+                    android:fontFamily="@font/sans"
+                    android:gravity="center"
+                    android:text="سینمایی"
+                    android:textColor="@color/BgTabText"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="1dp"
+                android:layout_height="match_parent"
+                android:background="@color/ViewHBtnC" />
+
+            <LinearLayout
+                android:id="@+id/TabAll_Frg5"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@color/BgTab"
+                android:clickable="true"
+                android:focusable="true">
+
+                <TextView
+                    android:id="@+id/TabAllTxt_Frg5"
+                    android:layout_width="match_parent"
+                    android:layout_height="38dp"
+                    android:background="@color/BgTabTextView"
+                    android:fontFamily="@font/sans"
+                    android:gravity="center"
+                    android:text="همه"
+                    android:textColor="@color/BgTabText"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/ViewHBtnC" />
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+                android:id="@+id/SwipeAll_Fr5"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="visible">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/TxtMsgAll_Fr5"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/sans"
+                        android:gravity="center"
+                        android:padding="20dp"
+                        android:text="هنوز فیلم یا سریالی به لیست علاقه‌مندی اضافه نکرده‌اید"
+                        android:textColor="@color/TxtcolorHome2"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/RecyclerAll_Frg5"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:focusable="true" />
+                </LinearLayout>
+            </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+            <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+                android:id="@+id/Swipe1_Fr5"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/TxtMsg1_Fr5"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/sans"
+                        android:gravity="center"
+                        android:padding="20dp"
+                        android:text="هنوز فیلم سینمایی به لیست علاقه‌مندی اضافه نکرده‌اید"
+                        android:textColor="@color/TxtcolorHome2"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/RecyclerCinema_Frg5"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:focusable="true" />
+                </LinearLayout>
+            </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+            <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+                android:id="@+id/Swipe2_Fr5"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/TxtMsg2_Fr5"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/sans"
+                        android:gravity="center"
+                        android:padding="20dp"
+                        android:text="هنوز سریالی به لیست علاقه‌مندی اضافه نکرده‌اید"
+                        android:textColor="@color/TxtcolorHome2"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/RecyclerSeryal_Frg5"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:focusable="true" />
+                </LinearLayout>
+            </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+            <LinearLayout
+                android:id="@+id/LayoutFolders_Frg5"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:id="@+id/PanelFoldersList_Frg5"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:visibility="visible">
+
+                    <RelativeLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingLeft="10dp"
+                        android:paddingTop="8dp"
+                        android:paddingRight="10dp"
+                        android:paddingBottom="6dp">
+
+                        <TextView
+                            android:id="@+id/BtnNewFolder_Frg5"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_alignParentLeft="true"
+                            android:layout_centerVertical="true"
+                            android:background="@color/BtnPopLogin"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:fontFamily="@font/sans"
+                            android:paddingLeft="12dp"
+                            android:paddingTop="6dp"
+                            android:paddingRight="12dp"
+                            android:paddingBottom="6dp"
+                            android:text="+ پوشه جدید"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_alignParentRight="true"
+                            android:layout_centerVertical="true"
+                            android:fontFamily="@font/sans"
+                            android:text="پوشه‌های شخصی"
+                            android:textColor="@color/TxtcolorHome"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+                    </RelativeLayout>
+
+                    <TextView
+                        android:id="@+id/TxtMsgFolders_Fr5"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/sans"
+                        android:gravity="center"
+                        android:padding="20dp"
+                        android:text="هنوز پوشه‌ای ایجاد نکرده‌اید"
+                        android:textColor="@color/TxtcolorHome2"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/RecyclerFolders_Frg5"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:paddingLeft="6dp"
+                        android:paddingRight="6dp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/PanelFolderDetail_Frg5"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <RelativeLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@color/BgItemsFilms"
+                        android:paddingLeft="8dp"
+                        android:paddingTop="8dp"
+                        android:paddingRight="10dp"
+                        android:paddingBottom="8dp">
+
+                        <LinearLayout
+                            android:id="@+id/LinFolderActions_Frg5"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_alignParentLeft="true"
+                            android:layout_centerVertical="true"
+                            android:orientation="horizontal">
+
+                            <ImageView
+                                android:id="@+id/BtnRenameFolder_Frg5"
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:layout_marginRight="4dp"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:padding="6dp"
+                                android:src="@drawable/ic_fav_edit" />
+
+                            <ImageView
+                                android:id="@+id/BtnDeleteFolder_Frg5"
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:clickable="true"
+                                android:focusable="true"
+                                android:padding="6dp"
+                                android:src="@drawable/ic_fav_delete" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/TxtFolderHeader_Frg5"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_centerVertical="true"
+                            android:layout_marginLeft="8dp"
+                            android:layout_marginRight="8dp"
+                            android:layout_toLeftOf="@id/BtnBackFolder_Frg5"
+                            android:layout_toRightOf="@id/LinFolderActions_Frg5"
+                            android:ellipsize="end"
+                            android:fontFamily="@font/sans"
+                            android:gravity="right"
+                            android:maxLines="1"
+                            android:text="نام پوشه"
+                            android:textColor="@color/TxtcolorHome"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/BtnBackFolder_Frg5"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_alignParentRight="true"
+                            android:layout_centerVertical="true"
+                            android:background="@color/BtnPopLogin"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:fontFamily="@font/sans"
+                            android:paddingLeft="10dp"
+                            android:paddingTop="5dp"
+                            android:paddingRight="10dp"
+                            android:paddingBottom="5dp"
+                            android:text="بازگشت ❯"
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+                    </RelativeLayout>
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="@color/ViewHBtnC" />
+
+                    <TextView
+                        android:id="@+id/TxtMsgFolderItems_Fr5"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/sans"
+                        android:gravity="center"
+                        android:padding="20dp"
+                        android:text="این پوشه هنوز خالی است"
+                        android:textColor="@color/TxtcolorHome2"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/RecyclerFolderItems_Frg5"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:focusable="true" />
+                </LinearLayout>
+            </LinearLayout>
+        </FrameLayout>
+    </LinearLayout>
+
+    <RelativeLayout
+        android:id="@+id/RelLoadingMore"
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:layout_alignParentBottom="true"
+        android:background="@color/BgLoadingg"
+        android:gravity="center"
+        android:visibility="gone">
+
+        <ProgressBar
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:indeterminateDrawable="@drawable/progress" />
+    </RelativeLayout>
+</RelativeLayout>
