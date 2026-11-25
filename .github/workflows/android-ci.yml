@@ -308,7 +308,8 @@ jobs:
           if lc.is_file():
               lines = [
                   l for l in lc.read_text(encoding="utf-8", errors='replace').splitlines()
-                  if any(k in l for k in ("com.delfan", "AndroidRuntime", "favs", "FATAL", "Exception", "Error"))
+                  if "AccessibilityNodeInfoDumper" not in l
+                  and any(k in l for k in ("com.delfan", "AndroidRuntime", "favs", "TitleLangHook", "kfdjfkls", "Volley", "OkHttp", "FATAL", "Exception", "Error"))
               ]
               text_parts.append("## Filtered Logcat\n```\n" + "\n".join(lines[-250:]) + "\n```\n")
 

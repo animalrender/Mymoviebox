@@ -159,7 +159,8 @@ def dismiss_app_popups(root):
             root = dump_ui()
             continue
         ok_btn = (
-            find_node(root, resource_id="PopupShowMsgVW_BtnOk")
+            find_node(root, resource_id="PopupShowDisConnect_BtnOk")
+            or find_node(root, resource_id="PopupShowMsgVW_BtnOk")
             or find_node(root, resource_id="PopupShowMsg_BtnOk")
             or find_node(root, text="باشه")
         )
@@ -171,7 +172,7 @@ def dismiss_app_popups(root):
     return root
 
 
-def wait_for_main_settled(timeout=45.0):
+def wait_for_main_settled(timeout=45.0, wait_vitrin_sec=8.0):
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
@@ -181,6 +182,13 @@ def wait_for_main_settled(timeout=45.0):
                 time.sleep(1.5)
                 root = dismiss_app_popups(dump_ui())
                 if find_node(root, resource_id="bottom_navigation") is not None:
+                    if wait_vitrin_sec > 0:
+                        v_end = time.time() + wait_vitrin_sec
+                        while time.time() < v_end:
+                            root = dismiss_app_popups(dump_ui())
+                            if find_node(root, resource_id="RelMain_ItemSeryalHome") is not None:
+                                break
+                            time.sleep(1.0)
                     return root
         except Exception:
             pass
@@ -249,19 +257,40 @@ def measure_cards_layout(root):
 
 
 def wait_for_main_after_reload(timeout=45.0):
-    return wait_for_main_settled(timeout=timeout)
+    return wait_for_main_settled(timeout=timeout, wait_vitrin_sec=0.0)
 
 
-def wait_for_cinema_cards(tab_label="سینمایی", min_count=3, timeout=20.0):
+def _nudge_list_refresh(root):
+    for rid in ("PopupShowDisConnect_BtnOk", "LinRload_ActSplash"):
+        btn = find_node(root, resource_id=rid)
+        if btn is not None:
+            tap_node(btn, f"retry {rid}", wait=2.0)
+            return
+    for label in ("بارگذاری مجدد", "تلاش مجدد"):
+        btn = find_node(root, text_contains=label)
+        if btn is not None:
+            tap_node(btn, f"retry {label}", wait=2.0)
+            return
+    adb("shell", "input", "swipe", "540", "700", "540", "1500", "350")
+    time.sleep(1.5)
+
+
+def wait_for_cinema_cards(tab_label="سینمایی", min_count=3, timeout=65.0):
     tap_bottom_tab(tab_label)
-    deadline = time.time() + timeout
+    start = time.time()
+    deadline = start + timeout
     cards = []
     root = None
+    nudged = False
     while time.time() < deadline:
         root = dismiss_app_popups(dump_ui())
         cards = measure_cards_layout(root)
         if len(cards) >= min_count:
             return root, cards
+        if not nudged and (time.time() - start) >= 25.0:
+            nudged = True
+            print(f"  [retry] {tab_label} still loading after 25s; triggering refresh", flush=True)
+            _nudge_list_refresh(root)
         time.sleep(1.0)
     raise AssertionError(
         f"Timed out waiting for {min_count} cards on {tab_label!r}. Visible:\n"
@@ -272,7 +301,21 @@ def wait_for_cinema_cards(tab_label="سینمایی", min_count=3, timeout=20.0)
 def open_drawer_from_cinema():
     root, btn = wait_for_node(timeout=8.0, resource_id="RelIcMenu_ToolBar_FrCinema")
     tap_node(btn, "RelIcMenu_ToolBar_FrCinema", wait=1.0)
-    root, item = wait_for_node(timeout=6.0, resource_id="DrMenu_RelChangeMovieTitle")
+    wait_for_node(timeout=6.0, resource_id="DrMenu_TxtName")
+    item = None
+    for _ in range(5):
+        root = dump_ui()
+        cand = find_node(root, resource_id="DrMenu_RelChangeMovieTitle")
+        if cand is not None:
+            b = parse_bounds(cand.attrib.get("bounds", ""))
+            if b is not None and (b[3] - b[1]) >= 40 and b[3] <= 2280:
+                item = cand
+                break
+        # Scroll inside the right drawer (x around 650) toward the bottom
+        adb("shell", "input", "swipe", "650", "1550", "650", "650", "300")
+        time.sleep(0.8)
+    if item is None:
+        root, item = wait_for_node(timeout=4.0, resource_id="DrMenu_RelChangeMovieTitle")
     txt_node = find_node(root, resource_id="DrMenu_TxtChangeMovieTitle")
     label = txt_node.attrib.get("text", "").strip() if txt_node is not None else ""
     return root, item, label
@@ -305,18 +348,23 @@ def wait_for_details_loaded(timeout=15.0):
 
 def open_media_card(tab_label: str, index: int = 0) -> str:
     tap_bottom_tab(tab_label)
-    # Wait up to 20s for RecyclerView items from server
-    deadline = time.time() + 20.0
+    start = time.time()
+    deadline = start + 50.0
     cards = []
     root = None
+    nudged = False
     while time.time() < deadline:
-        root = dump_ui()
+        root = dismiss_app_popups(dump_ui())
         cards = [
             c for c in find_all_nodes(root, resource_id="RelMain_ItemSeryalHome")
             if card_title(c)
         ]
         if len(cards) > index:
             break
+        if not nudged and (time.time() - start) >= 20.0:
+            nudged = True
+            adb("shell", "input", "swipe", "540", "700", "540", "1500", "350")
+            time.sleep(1.5)
         time.sleep(1.0)
     if len(cards) <= index:
         raise AssertionError(f"Could not find card #{index} under tab {tab_label!r}. Visible:\n" + "\n".join(list_all_texts(root)[:35]))
@@ -374,7 +422,7 @@ def main():
         screencap(scr_dir, "02-favs-empty.png")
 
         step("3. Open real Movie #1 -> verify clean string & offline favorite button visible")
-        cinema_root, cinema_cards = wait_for_cinema_cards("سینمایی", min_count=3, timeout=20.0)
+        cinema_root, cinema_cards = wait_for_cinema_cards("سینمایی", min_count=3, timeout=65.0)
         cinema_card_width = cinema_cards[0]["width"]
         cinema_first_row = [c for c in cinema_cards if abs(c["y1"] - cinema_cards[0]["y1"]) <= 20]
         if len(cinema_first_row) != 3:
@@ -623,7 +671,7 @@ def main():
         adb("shell", "svc", "wifi", "enable", check=False)
         adb("shell", "svc", "data", "enable", check=False)
         time.sleep(2.5)
-        wait_for_cinema_cards("سینمایی", min_count=3, timeout=20.0)
+        wait_for_cinema_cards("سینمایی", min_count=3, timeout=65.0)
         root, toggle_btn, toggle_label = open_drawer_from_cinema()
         if "انگلیسی" not in toggle_label:
             raise AssertionError(f"Expected drawer label for English switch, got: {toggle_label!r}")
@@ -636,7 +684,7 @@ def main():
         assert_text_absent(cur_ui, "جهت تغییر زبان عناوین")
         wait_for_main_after_reload(timeout=45.0)
 
-        root_en, en_cards = wait_for_cinema_cards("سینمایی", min_count=3, timeout=25.0)
+        root_en, en_cards = wait_for_cinema_cards("سینمایی", min_count=3, timeout=65.0)
         en_titles = [c["title"] for c in en_cards[:9]]
         latin_count = sum(1 for t in en_titles if re.search(r"[A-Za-z]{2,}", t))
         log(f"  English mode Cinema titles ({latin_count}/{len(en_titles)} Latin): {en_titles[:6]}")
@@ -655,7 +703,7 @@ def main():
         adb("shell", "am", "force-stop", PKG)
         time.sleep(1.0)
         launch_and_dismiss_to_main()
-        _, en_cards_after_restart = wait_for_cinema_cards("سینمایی", min_count=3, timeout=25.0)
+        _, en_cards_after_restart = wait_for_cinema_cards("سینمایی", min_count=3, timeout=65.0)
         en_titles_restart = [c["title"] for c in en_cards_after_restart[:9]]
         latin_restart = sum(1 for t in en_titles_restart if re.search(r"[A-Za-z]{2,}", t))
         log(f"  After cold restart Cinema titles ({latin_restart}/{len(en_titles_restart)} Latin): {en_titles_restart[:6]}")
@@ -667,7 +715,7 @@ def main():
         _, toggle_btn_back, _ = open_drawer_from_cinema()
         tap_node(toggle_btn_back, "DrMenu_RelChangeMovieTitle -> FA", wait=1.5)
         wait_for_main_after_reload(timeout=45.0)
-        _, fa_cards_restored = wait_for_cinema_cards("سینمایی", min_count=3, timeout=25.0)
+        _, fa_cards_restored = wait_for_cinema_cards("سینمایی", min_count=3, timeout=65.0)
         fa_titles_restored = [c["title"] for c in fa_cards_restored[:9]]
         persian_count = sum(1 for t in fa_titles_restored if re.search(r"[\u0600-\u06FF]{2,}", t))
         log(f"  Restored Persian Cinema titles ({persian_count}/{len(fa_titles_restored)} Persian): {fa_titles_restored[:6]}")
@@ -681,7 +729,7 @@ def main():
         time.sleep(0.5)
 
         step("10. Inspect logcat for zero fatal exceptions")
-        lc = adb("logcat", "-d", "-t", "1500", check=False)
+        lc = adb("logcat", "-d", "-t", "5000", check=False)
         fatal_hits = []
         for line in lc.splitlines():
             if PKG in line or "AndroidRuntime" in line or "favs" in line:
@@ -721,7 +769,7 @@ def main():
         except Exception:
             pass
         try:
-            lc = adb("logcat", "-d", "-t", "1500", check=False)
+            lc = adb("logcat", "-d", "-t", "5000", check=False)
             (log_dir / "logcat-e2e.txt").write_text(lc, encoding="utf-8")
         except Exception:
             pass

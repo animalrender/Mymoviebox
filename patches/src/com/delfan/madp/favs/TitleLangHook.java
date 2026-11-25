@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.util.Log;
 import android.widget.Toast;
 import com.delfan.madp.Acts.activity_splash;
 import com.delfan.madp.Other.b;
@@ -28,6 +29,7 @@ public final class TitleLangHook {
             if (sp.getBoolean(KEY_LANG_SET, false)) {
                 String saved = sp.getString(KEY_LANG, "");
                 b.j = isEnglish(saved) ? "EN" : "";
+                Log.d("TitleLangHook", "applySavedIfGuest -> b.j=" + b.j);
             }
         } catch (Throwable ignored) {}
     }
@@ -45,6 +47,7 @@ public final class TitleLangHook {
                     .commit();
         } catch (Throwable ignored) {}
         b.j = next;
+        Log.d("TitleLangHook", "toggleOffline -> next=" + next);
         try {
             Toast.makeText(
                     act,
