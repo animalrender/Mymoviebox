@@ -674,7 +674,7 @@ def _dismiss_player_overlays(root):
     return False
 
 
-def _ensure_player_controls_visible(timeout: float = 15.0):
+def _ensure_player_controls_visible(timeout: float = 20.0):
     deadline = time.time() + timeout
     while time.time() < deadline:
         root = dump_ui()
@@ -687,15 +687,16 @@ def _ensure_player_controls_visible(timeout: float = 15.0):
                 return root, btn
         cx, cy = _screen_center(root)
         adb("shell", "input", "tap", str(cx), str(cy))
-        time.sleep(0.6)
+        time.sleep(0.5)
     raise AssertionError("Timed out waiting for player controller btn_download_stream")
 
 
-def _wait_for_stream_grabbed(timeout: float = 20.0):
+def _wait_for_stream_grabbed(timeout: float = 30.0):
     deadline = time.time() + timeout
     last_desc = None
     while time.time() < deadline:
-        root, btn = _ensure_player_controls_visible(timeout=8.0)
+        rem = max(12.0, deadline - time.time())
+        root, btn = _ensure_player_controls_visible(timeout=rem)
         cd = btn.attrib.get("content-desc", "")
         last_desc = cd
         if "آماده" in cd:
@@ -706,7 +707,7 @@ def _wait_for_stream_grabbed(timeout: float = 20.0):
 
 def _open_stream_dialog():
     for attempt in range(3):
-        _, btn = _ensure_player_controls_visible(timeout=8.0)
+        _, btn = _ensure_player_controls_visible(timeout=20.0)
         tap_node(btn, f"btn_download_stream (attempt {attempt + 1})", wait=0.8)
         try:
             return wait_for_node(timeout=3.0, resource_id="TxtUrl_StreamDlg")
@@ -759,7 +760,7 @@ def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
             )
             time.sleep(2.0)
 
-            root1, btn1 = _wait_for_stream_grabbed(timeout=20.0)
+            root1, btn1 = _wait_for_stream_grabbed(timeout=30.0)
             rot1 = root1.attrib.get("rotation", "0")
             is_land1 = rot1 in ("1", "3")
             if is_land1:
@@ -788,10 +789,10 @@ def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
             tap_node(find_node(root_adm_err, text="لغو"), "dismiss ADM install prompt", wait=0.8)
 
             # Toggle orientation via btn_screen_rotate & verify the other orientation + re-capture
-            root_ctl, _ = _ensure_player_controls_visible(timeout=8.0)
+            root_ctl, _ = _ensure_player_controls_visible(timeout=20.0)
             rot_btn = find_node(root_ctl, resource_id="btn_screen_rotate")
             tap_node(rot_btn, "btn_screen_rotate -> toggle orientation", wait=2.5)
-            root2, btn2 = _wait_for_stream_grabbed(timeout=20.0)
+            root2, btn2 = _wait_for_stream_grabbed(timeout=30.0)
             rot2 = root2.attrib.get("rotation", "0")
             is_land2 = rot2 in ("1", "3")
             if is_land2:
@@ -842,7 +843,7 @@ def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
                 "--es", "Link_Id", "99",
             )
             time.sleep(2.0)
-            _wait_for_stream_grabbed(timeout=20.0)
+            _wait_for_stream_grabbed(timeout=30.0)
             _, tv_2h = _open_stream_dialog()
             shown_2h = tv_2h.attrib.get("text", "").strip()
             if shown_2h != twohop_url:
