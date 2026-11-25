@@ -149,35 +149,56 @@ def enter_text_in_field(node, value: str):
     time.sleep(0.5)
 
 
-def launch_and_dismiss_to_main():
-    adb("shell", "am", "start", "-W", "-n", f"{PKG}/com.delfan.madp.Acts.activity_splash")
-    deadline = time.time() + 45.0
+def dismiss_app_popups(root):
+    for _ in range(3):
+        if root is None:
+            return root
+        retry_btn = find_node(root, resource_id="LinRload_ActSplash") or find_node(root, text="بارگذاری مجدد")
+        if retry_btn is not None:
+            tap_node(retry_btn, "retry splash connection", wait=3.0)
+            root = dump_ui()
+            continue
+        ok_btn = (
+            find_node(root, resource_id="PopupShowMsgVW_BtnOk")
+            or find_node(root, resource_id="PopupShowMsg_BtnOk")
+            or find_node(root, text="باشه")
+        )
+        if ok_btn is not None:
+            tap_node(ok_btn, "dismiss popup", wait=1.2)
+            root = dump_ui()
+            continue
+        break
+    return root
+
+
+def wait_for_main_settled(timeout=45.0):
+    deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            root = dump_ui()
-            retry_btn = find_node(root, resource_id="LinRload_ActSplash") or find_node(root, text="بارگذاری مجدد")
-            if retry_btn is not None:
-                tap_node(retry_btn, "retry splash connection", wait=3.0)
-                continue
-            ok_btn = (
-                find_node(root, resource_id="PopupShowMsgVW_BtnOk")
-                or find_node(root, resource_id="PopupShowMsg_BtnOk")
-                or find_node(root, text="باشه")
-            )
-            if ok_btn is not None:
-                tap_node(ok_btn, "dismiss popup", wait=1.2)
-                continue
+            root = dismiss_app_popups(dump_ui())
             if find_node(root, resource_id="bottom_navigation") is not None:
-                return root
+                # Wait briefly for async WebView welcome popup (msgid) that opens right after activity_main starts
+                time.sleep(1.5)
+                root = dismiss_app_popups(dump_ui())
+                if find_node(root, resource_id="bottom_navigation") is not None:
+                    return root
         except Exception:
             pass
         time.sleep(1.0)
     raise AssertionError("Timed out waiting for activity_main bottom_navigation")
 
 
+def launch_and_dismiss_to_main():
+    adb("shell", "am", "start", "-W", "-n", f"{PKG}/com.delfan.madp.Acts.activity_splash")
+    return wait_for_main_settled(timeout=45.0)
+
+
 def tap_bottom_tab(label_contains: str):
-    root = dump_ui()
+    root = dismiss_app_popups(dump_ui())
     nav = find_node(root, resource_id="bottom_navigation")
+    if nav is None:
+        root = wait_for_main_settled(timeout=15.0)
+        nav = find_node(root, resource_id="bottom_navigation")
     min_y = 1900
     if nav is not None:
         nb = parse_bounds(nav.attrib.get("bounds", ""))
@@ -188,7 +209,7 @@ def tap_bottom_tab(label_contains: str):
         or find_node(root, content_desc=label_contains, min_y=min_y)
     )
     tap_node(tab, f"bottom tab {label_contains}", wait=1.5)
-    return dump_ui()
+    return dismiss_app_popups(dump_ui())
 
 
 def card_title(card_node) -> str:
@@ -228,28 +249,7 @@ def measure_cards_layout(root):
 
 
 def wait_for_main_after_reload(timeout=45.0):
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            root = dump_ui()
-            retry_btn = find_node(root, resource_id="LinRload_ActSplash") or find_node(root, text="بارگذاری مجدد")
-            if retry_btn is not None:
-                tap_node(retry_btn, "retry splash connection", wait=3.0)
-                continue
-            ok_btn = (
-                find_node(root, resource_id="PopupShowMsgVW_BtnOk")
-                or find_node(root, resource_id="PopupShowMsg_BtnOk")
-                or find_node(root, text="باشه")
-            )
-            if ok_btn is not None:
-                tap_node(ok_btn, "dismiss popup", wait=1.2)
-                continue
-            if find_node(root, resource_id="bottom_navigation") is not None:
-                return root
-        except Exception:
-            pass
-        time.sleep(1.0)
-    raise AssertionError("Timed out waiting for activity_main bottom_navigation after reload")
+    return wait_for_main_settled(timeout=timeout)
 
 
 def wait_for_cinema_cards(tab_label="سینمایی", min_count=3, timeout=20.0):
@@ -258,7 +258,7 @@ def wait_for_cinema_cards(tab_label="سینمایی", min_count=3, timeout=20.0)
     cards = []
     root = None
     while time.time() < deadline:
-        root = dump_ui()
+        root = dismiss_app_popups(dump_ui())
         cards = measure_cards_layout(root)
         if len(cards) >= min_count:
             return root, cards
