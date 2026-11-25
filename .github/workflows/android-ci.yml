@@ -298,6 +298,7 @@ jobs:
               ("window-focus.txt", Path("logs/window-focus.txt")),
               ("uidump_fail.xml", Path("logs/uidump_fail.xml")),
               ("offline_favorites_v1.xml", Path("logs/offline_favorites_v1.xml")),
+              ("MyPrefers.xml", Path("logs/MyPrefers.xml")),
               ("patch-build.log", Path("logs/patch-build.log")),
           ]:
               if p.is_file():
@@ -307,7 +308,8 @@ jobs:
           if lc.is_file():
               lines = [
                   l for l in lc.read_text(encoding="utf-8", errors='replace').splitlines()
-                  if any(k in l for k in ("com.delfan", "AndroidRuntime", "favs", "FATAL", "Exception", "Error"))
+                  if "AccessibilityNodeInfoDumper" not in l
+                  and any(k in l for k in ("com.delfan", "AndroidRuntime", "favs", "TitleLangHook", "kfdjfkls", "Volley", "OkHttp", "FATAL", "Exception", "Error"))
               ]
               text_parts.append("## Filtered Logcat\n```\n" + "\n".join(lines[-250:]) + "\n```\n")
 
@@ -349,7 +351,8 @@ jobs:
           {
             echo "## Mymoviebox — Offline Favorites & Folders ($TAG_NAME)"
             echo ""
-            echo "- 100% offline Favorites without login required"
+            echo "- 100% offline Favorites without login required (3-column grid matching Movies/Series)"
+            echo "- Toggle movie/series titles between Persian and English without login (persists across restarts)"
             echo "- Details modal folder picker (**همه / سینمایی / سریال / پوشه‌ها** tabs, create/rename/delete folders)"
             echo "- JSON Backup Export & Restore via Android Storage Access Framework"
             echo "- Pure Dalvik APK signed with v1/v2/v3; both \`universal\` and per-ABI packages included"

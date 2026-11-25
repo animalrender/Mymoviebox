@@ -20,9 +20,14 @@ Android APK patch, reproducible build pipeline, and automated API 33 emulator E2
      - **سینمایی** (Movies)
      - **سریال** (Series)
      - **پوشه‌ها** (Custom folders with item counts, inline create/rename/delete, and folder drill-down view)
+   - Matches the Cinema/Series 3-column grid (`R.integer.SpanCount`, `3` on phones) and normalized ASCII IMDb badge formatting (`6.6`).
    - Clicking any saved card opens `activity_detials_video` directly with offline fallback metadata.
 
-4. **Backup Export & Import (Android SAF)**
+4. **Guest Movie Title Language Switcher (`TitleLangHook`)**
+   - Enables the navigation drawer item **تغییر عناوین فیلم ها به انگلیسی / فارسی** (`DrMenu_RelChangeMovieTitle`) without requiring account login.
+   - Persists guest choice (`"EN"` vs `""`) locally in `SharedPreferences("MyPrefers")`, reapplies it across `activity_splash` and `activity_main` restarts (`am force-stop`), and preserves server-backed account behavior when signed in (`"T".equals(Other/b.s)`).
+
+5. **Backup Export & Import (Android SAF)**
    - **خروجی** (`ACTION_CREATE_DOCUMENT`): exports a versioned JSON snapshot (`mymoviebox-favorites.json`, schema v1) containing all folders and saved items.
    - **ورودی** (`ACTION_OPEN_DOCUMENT`): imports and merges folders/items safely without losing existing local entries.
    - Persists synchronously in `SharedPreferences("offline_favorites_v1")` across app restarts (`am force-stop`).
@@ -87,9 +92,10 @@ Outputs under `dist/`:
 2. Offline Favorites empty state verification without any login dialog
 3. Live movie & series Details inspection (`افزودن به علاقه‌مندی`, absence of `@string/Txt356` credit string)
 4. Multi-folder creation, assignment, and removal via modal dialog
-5. Verification of all 4 Favorites tabs (**همه / سینمایی / سریال / پوشه‌ها**), folder drill-down, and rename
+5. Verification of all 4 Favorites tabs (**همه / سینمایی / سریال / پوشه‌ها**), 3-column grid geometry matching Cinema, normalized ASCII IMDb ratings, folder drill-down, and rename
 6. Storage Access Framework (**خروجی / ورودی**) JSON export -> delete item -> import restore
 7. Process kill persistence (`am force-stop`) and offline Details view with Wi-Fi + mobile data disabled
-8. Logcat check confirming zero fatal runtime/Dalvik/resource exceptions
+8. Guest Movie Title Language Switcher (**تغییر عناوین فیلم ها به انگلیسی / فارسی**) without login prompt, verified across cold restarts and toggled back cleanly
+9. Logcat check confirming zero fatal runtime/Dalvik/resource exceptions
 
 Every change merged or pushed to `main` automatically tags and publishes a new GitHub Release starting at **`v1.0.0`** and incrementing semantic patch versions (`v1.0.1`, `v1.0.2`, ...; include `[minor]` or `[major]` in a commit message to bump minor/major) with all 5 verified APKs (`universal` + per-ABI) and `SHA256SUMS.txt` attached.

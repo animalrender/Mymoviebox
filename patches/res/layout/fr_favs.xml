@@ -246,6 +246,7 @@
                 android:id="@+id/SwipeAll_Fr5"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:layout_marginTop="@dimen/MarginTopSwipe"
                 android:visibility="visible">
 
                 <LinearLayout
@@ -270,6 +271,7 @@
                         android:id="@+id/RecyclerAll_Frg5"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
+                        android:layout_marginTop="3dp"
                         android:focusable="true" />
                 </LinearLayout>
             </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
@@ -278,6 +280,7 @@
                 android:id="@+id/Swipe1_Fr5"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:layout_marginTop="@dimen/MarginTopSwipe"
                 android:visibility="gone">
 
                 <LinearLayout
@@ -302,6 +305,7 @@
                         android:id="@+id/RecyclerCinema_Frg5"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
+                        android:layout_marginTop="3dp"
                         android:focusable="true" />
                 </LinearLayout>
             </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
@@ -310,6 +314,7 @@
                 android:id="@+id/Swipe2_Fr5"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:layout_marginTop="@dimen/MarginTopSwipe"
                 android:visibility="gone">
 
                 <LinearLayout
@@ -334,6 +339,7 @@
                         android:id="@+id/RecyclerSeryal_Frg5"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
+                        android:layout_marginTop="3dp"
                         android:focusable="true" />
                 </LinearLayout>
             </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
@@ -516,6 +522,7 @@
                         android:id="@+id/RecyclerFolderItems_Frg5"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
+                        android:layout_marginTop="3dp"
                         android:focusable="true" />
                 </LinearLayout>
             </LinearLayout>

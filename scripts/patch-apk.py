@@ -417,6 +417,121 @@ def patch_details_response_hook(decoded_dir: Path):
     print(f"  patched {p.relative_to(decoded_dir)} (reg_this={reg_this}, reg_btn={reg_btn})")
 
 
+def patch_title_lang_hooks(decoded_dir: Path):
+    # 1. Intercept guest taps on DrMenu_RelChangeMovieTitle in activity_main$b.onClick -> TitleLangHook.toggleOffline
+    p_btn = find_smali(decoded_dir, "com/delfan/madp/Acts/activity_main$b.smali")
+    t_btn = p_btn.read_text(encoding="utf-8")
+    m_btn_method = re.search(
+        r"(^\.method[^\n]*\sonClick\(Landroid/view/View;\)V\n)(.*?)(^\.end method)",
+        t_btn,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not m_btn_method:
+        raise RuntimeError("onClick(View)V not found in activity_main$b.smali")
+    btn_body = m_btn_method.group(2)
+    m_loc = re.search(r"^([ \t]*\.locals\s+(\d+)[^\n]*\n)", btn_body, re.MULTILINE)
+    if not m_loc:
+        raise RuntimeError("Expected .locals directive in activity_main$b.onClick")
+    if int(m_loc.group(2)) < 2:
+        raise RuntimeError(f"Expected >= 2 locals in activity_main$b.onClick, got {m_loc.group(2)}")
+    btn_guard = (
+        "    sget-object v0, Lcom/delfan/madp/Other/b;->s:Ljava/lang/String;\n"
+        "    const-string v1, \"T\"\n"
+        "    invoke-virtual {v1, v0}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z\n"
+        "    move-result v0\n"
+        "    if-nez v0, :cond_logged_in_title_lang\n\n"
+        "    iget-object v0, p0, Lcom/delfan/madp/Acts/activity_main$b;->a:Lcom/delfan/madp/Acts/activity_main;\n"
+        "    invoke-static {v0}, Lcom/delfan/madp/favs/TitleLangHook;->toggleOffline(Landroid/app/Activity;)V\n"
+        "    return-void\n\n"
+        "    :cond_logged_in_title_lang\n"
+    )
+    new_btn_body = btn_body[: m_loc.end(1)] + btn_guard + btn_body[m_loc.end(1) :]
+    t_btn = t_btn[: m_btn_method.start(2)] + new_btn_body + t_btn[m_btn_method.end(2) :]
+    p_btn.write_text(t_btn, encoding="utf-8")
+    print(f"  patched {p_btn.relative_to(decoded_dir)} (guest guard)")
+
+    # 2. Re-apply saved guest title language after CheckUser updates b.j & b.s in activity_splash$b.b
+    p_sp_cb = find_smali(decoded_dir, "com/delfan/madp/Acts/activity_splash$b.smali")
+    t_sp_cb = p_sp_cb.read_text(encoding="utf-8")
+    m_sp_cb = re.search(
+        r"(^\.method[^\n]*\sb\(Ljava/lang/String;\)V\n)(.*?)(^\.end method)",
+        t_sp_cb,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not m_sp_cb:
+        raise RuntimeError("b(String)V not found in activity_splash$b.smali")
+    sp_cb_body = m_sp_cb.group(2)
+    pat_sp_cb = re.compile(
+        r"([ \t]*sput-object\s+[vp]\d+,\s*Lcom/delfan/madp/Other/b;->f:Ljava/lang/String;\s*\n"
+        r"(?:[ \t]*(?:\.line[^\n]*|\.catch[^\n]*|:try_end_[^\n]*|#[^\n]*)?\n)*)"
+        r"([ \t]*const-string\s+(v\d+),\s*\"\"\s*\n)",
+        re.MULTILINE,
+    )
+    m_sp_cb_matches = list(pat_sp_cb.finditer(sp_cb_body))
+    if len(m_sp_cb_matches) != 1:
+        raise RuntimeError(f"Expected 1 b.f -> const-string match in activity_splash$b.b, found {len(m_sp_cb_matches)}")
+    m_sc = m_sp_cb_matches[0]
+    reg_tmp = m_sc.group(3)
+    if int(reg_tmp[1:]) > 15:
+        raise RuntimeError(f"Expected 4-bit register for iget-object in activity_splash$b.b, got {reg_tmp}")
+    sp_cb_hook = (
+        f"    iget-object {reg_tmp}, p0, Lcom/delfan/madp/Acts/activity_splash$b;->a:Lcom/delfan/madp/Acts/activity_splash;\n"
+        f"    invoke-static/range {{{reg_tmp} .. {reg_tmp}}}, Lcom/delfan/madp/favs/TitleLangHook;->applySavedIfGuest(Landroid/content/Context;)V\n"
+    )
+    new_sp_cb_body = sp_cb_body[: m_sc.end(1)] + sp_cb_hook + m_sc.group(2) + sp_cb_body[m_sc.end(2) :]
+    t_sp_cb = t_sp_cb[: m_sp_cb.start(2)] + new_sp_cb_body + t_sp_cb[m_sp_cb.end(2) :]
+    p_sp_cb.write_text(t_sp_cb, encoding="utf-8")
+    print(f"  patched {p_sp_cb.relative_to(decoded_dir)} (reg_tmp={reg_tmp})")
+
+    # 3. Restore guest title language early in activity_splash.onCreate
+    p_sp = find_smali(decoded_dir, "com/delfan/madp/Acts/activity_splash.smali")
+    t_sp = p_sp.read_text(encoding="utf-8")
+    m_sp = re.search(
+        r"(^\.method[^\n]*\sonCreate\(Landroid/os/Bundle;\)V\n)(.*?)(^\.end method)",
+        t_sp,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not m_sp:
+        raise RuntimeError("onCreate(Bundle)V not found in activity_splash.smali")
+    sp_body = m_sp.group(2)
+    pat_sp = re.compile(
+        r"([ \t]*invoke-super\s+\{p0,\s*p1\},\s*Lcom/delfan/madp/Other/BaseActivitySave;->onCreate\(Landroid/os/Bundle;\)V\s*\n)",
+        re.MULTILINE,
+    )
+    m_sp_matches = list(pat_sp.finditer(sp_body))
+    if len(m_sp_matches) != 1:
+        raise RuntimeError(f"Expected 1 BaseActivitySave.onCreate super call in activity_splash.onCreate, found {len(m_sp_matches)}")
+    sp_hook = "    invoke-static/range {p0 .. p0}, Lcom/delfan/madp/favs/TitleLangHook;->applySavedIfGuest(Landroid/content/Context;)V\n"
+    new_sp_body = sp_body[: m_sp_matches[0].end(1)] + sp_hook + sp_body[m_sp_matches[0].end(1) :]
+    t_sp = t_sp[: m_sp.start(2)] + new_sp_body + t_sp[m_sp.end(2) :]
+    p_sp.write_text(t_sp, encoding="utf-8")
+    print(f"  patched {p_sp.relative_to(decoded_dir)}")
+
+    # 4. Ensure guest title language is applied in activity_main.onCreate before drawer label check
+    p_main = find_smali(decoded_dir, "com/delfan/madp/Acts/activity_main.smali")
+    t_main = p_main.read_text(encoding="utf-8")
+    m_main = re.search(
+        r"(^\.method[^\n]*\sonCreate\(Landroid/os/Bundle;\)V\n)(.*?)(^\.end method)",
+        t_main,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not m_main:
+        raise RuntimeError("onCreate(Bundle)V not found in activity_main.smali")
+    main_body = m_main.group(2)
+    pat_main = re.compile(
+        r"([ \t]*sput-object\s+[vp]\d+,\s*Lcom/delfan/madp/Other/b;->j:Ljava/lang/String;\s*\n)",
+        re.MULTILINE,
+    )
+    m_main_matches = list(pat_main.finditer(main_body))
+    if len(m_main_matches) != 1:
+        raise RuntimeError(f"Expected 1 b.j write in activity_main.onCreate, found {len(m_main_matches)}")
+    main_hook = "    invoke-static/range {p0 .. p0}, Lcom/delfan/madp/favs/TitleLangHook;->applySavedIfGuest(Landroid/content/Context;)V\n"
+    new_main_body = main_body[: m_main_matches[0].end(1)] + main_hook + main_body[m_main_matches[0].end(1) :]
+    t_main = t_main[: m_main.start(2)] + new_main_body + t_main[m_main.end(2) :]
+    p_main.write_text(t_main, encoding="utf-8")
+    print(f"  patched {p_main.relative_to(decoded_dir)}")
+
+
 def inject_classes8_dex(unsigned_apk: Path, patch_dex: Path, out_apk: Path):
     with zipfile.ZipFile(unsigned_apk, "r") as zin:
         names = zin.namelist()
@@ -551,6 +666,7 @@ def main():
     patch_activity_detials_video(decoded_dir)
     patch_details_fav_click(decoded_dir)
     patch_details_response_hook(decoded_dir)
+    patch_title_lang_hooks(decoded_dir)
 
     print("5/6 Rebuilding APK and injecting classes8.dex ...")
     rebuilt_apk = work_dir / "rebuilt-no-dex8.apk"

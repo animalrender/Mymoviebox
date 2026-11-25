@@ -33,6 +33,16 @@ public final class Res {
     public static int color(Context ctx, String name) { return get(ctx, "color", name); }
     public static int font(Context ctx, String name) { return get(ctx, "font", name); }
 
+    public static int integer(Context ctx, String name, int fallback) {
+        int id = get(ctx, "integer", name);
+        if (id == 0) return fallback;
+        try {
+            return ctx.getResources().getInteger(id);
+        } catch (Throwable t) {
+            return fallback;
+        }
+    }
+
     public static int getColor(Context ctx, String name, int fallback) {
         int id = color(ctx, name);
         if (id == 0) return fallback;
@@ -65,6 +75,22 @@ public final class Res {
             char c = s.charAt(i);
             if (c >= '0' && c <= '9') {
                 sb.append((char) ('\u06F0' + (c - '0')));
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    public static String toAsciiDigits(String raw) {
+        if (raw == null || raw.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder(raw.length());
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            if (c >= '\u06F0' && c <= '\u06F9') {
+                sb.append((char) ('0' + (c - '\u06F0')));
+            } else if (c >= '\u0660' && c <= '\u0669') {
+                sb.append((char) ('0' + (c - '\u0660')));
             } else {
                 sb.append(c);
             }

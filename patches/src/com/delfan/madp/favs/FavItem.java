@@ -58,7 +58,7 @@ public class FavItem {
                 "",
                 normalizeWhat(what),
                 safe(year),
-                safe(imdb)
+                Res.toAsciiDigits(safe(imdb))
         );
     }
 
@@ -93,7 +93,7 @@ public class FavItem {
         item.poster = o.optString("poster", "");
         item.what = normalizeWhat(o.optString("what", "movie"));
         item.year = o.optString("year", "");
-        item.imdb = o.optString("imdb", "");
+        item.imdb = Res.toAsciiDigits(o.optString("imdb", ""));
         item.addedAt = o.optLong("addedAt", System.currentTimeMillis());
         JSONArray arr = o.optJSONArray("folderIds");
         if (arr != null) {

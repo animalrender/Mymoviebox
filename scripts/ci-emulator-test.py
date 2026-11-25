@@ -149,35 +149,64 @@ def enter_text_in_field(node, value: str):
     time.sleep(0.5)
 
 
-def launch_and_dismiss_to_main():
-    adb("shell", "am", "start", "-W", "-n", f"{PKG}/com.delfan.madp.Acts.activity_splash")
-    deadline = time.time() + 45.0
+def dismiss_app_popups(root):
+    for _ in range(3):
+        if root is None:
+            return root
+        retry_btn = find_node(root, resource_id="LinRload_ActSplash") or find_node(root, text="بارگذاری مجدد")
+        if retry_btn is not None:
+            tap_node(retry_btn, "retry splash connection", wait=3.0)
+            root = dump_ui()
+            continue
+        ok_btn = (
+            find_node(root, resource_id="PopupShowDisConnect_BtnOk")
+            or find_node(root, resource_id="PopupShowMsgVW_BtnOk")
+            or find_node(root, resource_id="PopupShowMsg_BtnOk")
+            or find_node(root, text="باشه")
+        )
+        if ok_btn is not None:
+            tap_node(ok_btn, "dismiss popup", wait=1.2)
+            root = dump_ui()
+            continue
+        break
+    return root
+
+
+def wait_for_main_settled(timeout=45.0, wait_vitrin_sec=8.0):
+    deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            root = dump_ui()
-            retry_btn = find_node(root, resource_id="LinRload_ActSplash") or find_node(root, text="بارگذاری مجدد")
-            if retry_btn is not None:
-                tap_node(retry_btn, "retry splash connection", wait=3.0)
-                continue
-            ok_btn = (
-                find_node(root, resource_id="PopupShowMsgVW_BtnOk")
-                or find_node(root, resource_id="PopupShowMsg_BtnOk")
-                or find_node(root, text="باشه")
-            )
-            if ok_btn is not None:
-                tap_node(ok_btn, "dismiss popup", wait=1.2)
-                continue
+            root = dismiss_app_popups(dump_ui())
             if find_node(root, resource_id="bottom_navigation") is not None:
-                return root
+                # Wait briefly for async WebView welcome popup (msgid) that opens right after activity_main starts
+                time.sleep(1.5)
+                root = dismiss_app_popups(dump_ui())
+                if find_node(root, resource_id="bottom_navigation") is not None:
+                    if wait_vitrin_sec > 0:
+                        v_end = time.time() + wait_vitrin_sec
+                        while time.time() < v_end:
+                            root = dismiss_app_popups(dump_ui())
+                            if find_node(root, resource_id="RelMain_ItemSeryalHome") is not None:
+                                break
+                            time.sleep(1.0)
+                    return root
         except Exception:
             pass
         time.sleep(1.0)
     raise AssertionError("Timed out waiting for activity_main bottom_navigation")
 
 
+def launch_and_dismiss_to_main():
+    adb("shell", "am", "start", "-W", "-n", f"{PKG}/com.delfan.madp.Acts.activity_splash")
+    return wait_for_main_settled(timeout=45.0)
+
+
 def tap_bottom_tab(label_contains: str):
-    root = dump_ui()
+    root = dismiss_app_popups(dump_ui())
     nav = find_node(root, resource_id="bottom_navigation")
+    if nav is None:
+        root = wait_for_main_settled(timeout=15.0)
+        nav = find_node(root, resource_id="bottom_navigation")
     min_y = 1900
     if nav is not None:
         nb = parse_bounds(nav.attrib.get("bounds", ""))
@@ -188,7 +217,7 @@ def tap_bottom_tab(label_contains: str):
         or find_node(root, content_desc=label_contains, min_y=min_y)
     )
     tap_node(tab, f"bottom tab {label_contains}", wait=1.5)
-    return dump_ui()
+    return dismiss_app_popups(dump_ui())
 
 
 def card_title(card_node) -> str:
@@ -197,6 +226,99 @@ def card_title(card_node) -> str:
         if rid.endswith(":id/TxtTitle_ItemSeryalHome"):
             return sub.attrib.get("text", "").strip()
     return ""
+
+
+def card_imdb(card_node) -> str:
+    for sub in card_node.iter("node"):
+        rid = sub.attrib.get("resource-id", "")
+        if rid.endswith(":id/TxtImdb_ItemSeryalHome"):
+            return sub.attrib.get("text", "").strip()
+    return ""
+
+
+def measure_cards_layout(root):
+    cards = []
+    for c in find_all_nodes(root, resource_id="RelMain_ItemSeryalHome"):
+        title = card_title(c)
+        b = parse_bounds(c.attrib.get("bounds", ""))
+        if title and b is not None:
+            x1, y1, x2, y2 = b
+            cards.append({
+                "title": title,
+                "imdb": card_imdb(c),
+                "x1": x1,
+                "y1": y1,
+                "x2": x2,
+                "y2": y2,
+                "width": x2 - x1,
+                "node": c,
+            })
+    return cards
+
+
+def wait_for_main_after_reload(timeout=45.0):
+    return wait_for_main_settled(timeout=timeout, wait_vitrin_sec=0.0)
+
+
+def _nudge_list_refresh(root):
+    for rid in ("PopupShowDisConnect_BtnOk", "LinRload_ActSplash"):
+        btn = find_node(root, resource_id=rid)
+        if btn is not None:
+            tap_node(btn, f"retry {rid}", wait=2.0)
+            return
+    for label in ("بارگذاری مجدد", "تلاش مجدد"):
+        btn = find_node(root, text_contains=label)
+        if btn is not None:
+            tap_node(btn, f"retry {label}", wait=2.0)
+            return
+    adb("shell", "input", "swipe", "540", "700", "540", "1500", "350")
+    time.sleep(1.5)
+
+
+def wait_for_cinema_cards(tab_label="سینمایی", min_count=3, timeout=65.0):
+    tap_bottom_tab(tab_label)
+    start = time.time()
+    deadline = start + timeout
+    cards = []
+    root = None
+    nudged = False
+    while time.time() < deadline:
+        root = dismiss_app_popups(dump_ui())
+        cards = measure_cards_layout(root)
+        if len(cards) >= min_count:
+            return root, cards
+        if not nudged and (time.time() - start) >= 25.0:
+            nudged = True
+            print(f"  [retry] {tab_label} still loading after 25s; triggering refresh", flush=True)
+            _nudge_list_refresh(root)
+        time.sleep(1.0)
+    raise AssertionError(
+        f"Timed out waiting for {min_count} cards on {tab_label!r}. Visible:\n"
+        + "\n".join(list_all_texts(root)[:35] if root is not None else [])
+    )
+
+
+def open_drawer_from_cinema():
+    root, btn = wait_for_node(timeout=8.0, resource_id="RelIcMenu_ToolBar_FrCinema")
+    tap_node(btn, "RelIcMenu_ToolBar_FrCinema", wait=1.0)
+    wait_for_node(timeout=6.0, resource_id="DrMenu_TxtName")
+    item = None
+    for _ in range(5):
+        root = dump_ui()
+        cand = find_node(root, resource_id="DrMenu_RelChangeMovieTitle")
+        if cand is not None:
+            b = parse_bounds(cand.attrib.get("bounds", ""))
+            if b is not None and (b[3] - b[1]) >= 40 and b[3] <= 2280:
+                item = cand
+                break
+        # Scroll inside the right drawer (x around 650) toward the bottom
+        adb("shell", "input", "swipe", "650", "1550", "650", "650", "300")
+        time.sleep(0.8)
+    if item is None:
+        root, item = wait_for_node(timeout=4.0, resource_id="DrMenu_RelChangeMovieTitle")
+    txt_node = find_node(root, resource_id="DrMenu_TxtChangeMovieTitle")
+    label = txt_node.attrib.get("text", "").strip() if txt_node is not None else ""
+    return root, item, label
 
 
 def wait_for_details_loaded(timeout=15.0):
@@ -226,18 +348,23 @@ def wait_for_details_loaded(timeout=15.0):
 
 def open_media_card(tab_label: str, index: int = 0) -> str:
     tap_bottom_tab(tab_label)
-    # Wait up to 20s for RecyclerView items from server
-    deadline = time.time() + 20.0
+    start = time.time()
+    deadline = start + 50.0
     cards = []
     root = None
+    nudged = False
     while time.time() < deadline:
-        root = dump_ui()
+        root = dismiss_app_popups(dump_ui())
         cards = [
             c for c in find_all_nodes(root, resource_id="RelMain_ItemSeryalHome")
             if card_title(c)
         ]
         if len(cards) > index:
             break
+        if not nudged and (time.time() - start) >= 20.0:
+            nudged = True
+            adb("shell", "input", "swipe", "540", "700", "540", "1500", "350")
+            time.sleep(1.5)
         time.sleep(1.0)
     if len(cards) <= index:
         raise AssertionError(f"Could not find card #{index} under tab {tab_label!r}. Visible:\n" + "\n".join(list_all_texts(root)[:35]))
@@ -295,7 +422,16 @@ def main():
         screencap(scr_dir, "02-favs-empty.png")
 
         step("3. Open real Movie #1 -> verify clean string & offline favorite button visible")
-        movie1_title = open_media_card("سینمایی", 0)
+        cinema_root, cinema_cards = wait_for_cinema_cards("سینمایی", min_count=3, timeout=65.0)
+        cinema_card_width = cinema_cards[0]["width"]
+        cinema_first_row = [c for c in cinema_cards if abs(c["y1"] - cinema_cards[0]["y1"]) <= 20]
+        if len(cinema_first_row) != 3:
+            raise AssertionError(f"Expected 3 columns in Cinema reference grid, found {len(cinema_first_row)} cards on first row: {cinema_first_row}")
+        cinema_persian_titles = [c["title"] for c in cinema_cards[:9]]
+        log(f"  Cinema reference grid: {len(cinema_first_row)} columns, card_width={cinema_card_width}px, sample={cinema_persian_titles[:3]}")
+
+        movie1_title = cinema_cards[0]["title"]
+        tap_node(cinema_cards[0]["node"], f"سینمایی card #0 ({movie1_title})", wait=2.0)
         log(f"  Opened Movie #1: {movie1_title}")
         root, btn_fav = wait_for_details_loaded(timeout=15.0)
         assert_text_absent(root, "Mahroid")
@@ -357,11 +493,26 @@ def main():
         adb("shell", "input", "keyevent", "KEYCODE_BACK")
         time.sleep(1.0)
 
-        step("6. Verify Favorites Tabs: All / Movies / Series / Folders / Folder Detail / Rename")
+        step("6. Verify Favorites Tabs, 3-Column Grid Layout & ASCII IMDb: All / Movies / Series / Folders / Folder Detail / Rename")
         root = tap_bottom_tab("علاقه مندی")
         for t in (movie1_title, movie2_title, series1_title):
             if find_node(root, text=t) is None:
                 raise AssertionError(f"Missing {t!r} in All tab")
+        fav_cards = measure_cards_layout(root)
+        if len(fav_cards) != 3:
+            raise AssertionError(f"Expected 3 favorite cards in All tab, got {len(fav_cards)}: {[c['title'] for c in fav_cards]}")
+        fav_card_width = fav_cards[0]["width"]
+        row_y_spread = max(c["y1"] for c in fav_cards) - min(c["y1"] for c in fav_cards)
+        if abs(fav_card_width - cinema_card_width) > 12:
+            raise AssertionError(
+                f"Favorites card width ({fav_card_width}px) does not match Cinema 3-column width ({cinema_card_width}px)!"
+            )
+        if row_y_spread > 25:
+            raise AssertionError(f"Expected all 3 favorites on one 3-column row, y1 spread was {row_y_spread}px")
+        for fc in fav_cards:
+            if fc["imdb"] and re.search(r"[\u06F0-\u06F9\u0660-\u0669]", fc["imdb"]):
+                raise AssertionError(f"Expected ASCII IMDb digits on card {fc['title']!r}, got {fc['imdb']!r}")
+        log(f"  Favorites 3-column grid verified: width={fav_card_width}px (Cinema={cinema_card_width}px), y_spread={row_y_spread}px, imdb={[c['imdb'] for c in fav_cards]}")
         screencap(scr_dir, "07-favs-all-tab.png")
 
         tap_node(find_node(root, resource_id="TabFaraB_Frg5"), "Movies sub-tab")
@@ -516,8 +667,69 @@ def main():
         adb("shell", "input", "keyevent", "KEYCODE_BACK")
         time.sleep(1.0)
 
-        step("9. Inspect logcat for zero fatal exceptions")
-        lc = adb("logcat", "-d", "-t", "1500", check=False)
+        step("9. Guest English/Persian Movie Title Toggle & Cold-Restart Persistence")
+        adb("shell", "svc", "wifi", "enable", check=False)
+        adb("shell", "svc", "data", "enable", check=False)
+        time.sleep(2.5)
+        wait_for_cinema_cards("سینمایی", min_count=3, timeout=65.0)
+        root, toggle_btn, toggle_label = open_drawer_from_cinema()
+        if "انگلیسی" not in toggle_label:
+            raise AssertionError(f"Expected drawer label for English switch, got: {toggle_label!r}")
+        screencap(scr_dir, "17-drawer-title-lang-en-option.png")
+
+        tap_node(toggle_btn, "DrMenu_RelChangeMovieTitle -> EN", wait=1.5)
+        time.sleep(1.0)
+        cur_ui = dump_ui()
+        assert_text_absent(cur_ui, "وارد حساب کاربری")
+        assert_text_absent(cur_ui, "جهت تغییر زبان عناوین")
+        wait_for_main_after_reload(timeout=45.0)
+
+        root_en, en_cards = wait_for_cinema_cards("سینمایی", min_count=3, timeout=65.0)
+        en_titles = [c["title"] for c in en_cards[:9]]
+        latin_count = sum(1 for t in en_titles if re.search(r"[A-Za-z]{2,}", t))
+        log(f"  English mode Cinema titles ({latin_count}/{len(en_titles)} Latin): {en_titles[:6]}")
+        if latin_count < 2 or en_titles[:6] == cinema_persian_titles[:6]:
+            raise AssertionError(
+                f"Expected English titles in Cinema after toggling without login! Before={cinema_persian_titles[:6]}, After={en_titles[:6]}"
+            )
+        screencap(scr_dir, "18-cinema-english-titles.png")
+
+        _, toggle_btn_fa, toggle_label_fa = open_drawer_from_cinema()
+        if "فارسی" not in toggle_label_fa:
+            raise AssertionError(f"Expected drawer label to switch to Persian ('فارسی'), got: {toggle_label_fa!r}")
+        screencap(scr_dir, "19-drawer-title-lang-fa-option.png")
+
+        # Kill app completely and verify English titles persist across cold restart without login
+        adb("shell", "am", "force-stop", PKG)
+        time.sleep(1.0)
+        launch_and_dismiss_to_main()
+        _, en_cards_after_restart = wait_for_cinema_cards("سینمایی", min_count=3, timeout=65.0)
+        en_titles_restart = [c["title"] for c in en_cards_after_restart[:9]]
+        latin_restart = sum(1 for t in en_titles_restart if re.search(r"[A-Za-z]{2,}", t))
+        log(f"  After cold restart Cinema titles ({latin_restart}/{len(en_titles_restart)} Latin): {en_titles_restart[:6]}")
+        if latin_restart < 2:
+            raise AssertionError(f"English titles did not persist across am force-stop! Got: {en_titles_restart[:6]}")
+        screencap(scr_dir, "20-cinema-english-after-restart.png")
+
+        # Toggle back to Persian titles cleanly
+        _, toggle_btn_back, _ = open_drawer_from_cinema()
+        tap_node(toggle_btn_back, "DrMenu_RelChangeMovieTitle -> FA", wait=1.5)
+        wait_for_main_after_reload(timeout=45.0)
+        _, fa_cards_restored = wait_for_cinema_cards("سینمایی", min_count=3, timeout=65.0)
+        fa_titles_restored = [c["title"] for c in fa_cards_restored[:9]]
+        persian_count = sum(1 for t in fa_titles_restored if re.search(r"[\u0600-\u06FF]{2,}", t))
+        log(f"  Restored Persian Cinema titles ({persian_count}/{len(fa_titles_restored)} Persian): {fa_titles_restored[:6]}")
+        if persian_count < 2:
+            raise AssertionError(f"Expected Persian titles restored after toggling back! Got: {fa_titles_restored[:6]}")
+        _, _, restored_label = open_drawer_from_cinema()
+        if "انگلیسی" not in restored_label:
+            raise AssertionError(f"Expected drawer label back to English option, got: {restored_label!r}")
+        screencap(scr_dir, "21-cinema-persian-restored.png")
+        adb("shell", "input", "keyevent", "KEYCODE_BACK")
+        time.sleep(0.5)
+
+        step("10. Inspect logcat for zero fatal exceptions")
+        lc = adb("logcat", "-d", "-t", "5000", check=False)
         fatal_hits = []
         for line in lc.splitlines():
             if PKG in line or "AndroidRuntime" in line or "favs" in line:
@@ -557,7 +769,7 @@ def main():
         except Exception:
             pass
         try:
-            lc = adb("logcat", "-d", "-t", "1500", check=False)
+            lc = adb("logcat", "-d", "-t", "5000", check=False)
             (log_dir / "logcat-e2e.txt").write_text(lc, encoding="utf-8")
         except Exception:
             pass
@@ -567,6 +779,8 @@ def main():
                 time.sleep(1.0)
                 prefs_xml = adb("shell", "cat", f"/data/data/{PKG}/shared_prefs/offline_favorites_v1.xml", check=False)
                 (log_dir / "offline_favorites_v1.xml").write_text(prefs_xml, encoding="utf-8")
+                my_prefs_xml = adb("shell", "cat", f"/data/data/{PKG}/shared_prefs/MyPrefers.xml", check=False)
+                (log_dir / "MyPrefers.xml").write_text(my_prefs_xml, encoding="utf-8")
         except Exception:
             pass
 
