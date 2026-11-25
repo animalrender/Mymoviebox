@@ -298,6 +298,7 @@ jobs:
               ("window-focus.txt", Path("logs/window-focus.txt")),
               ("uidump_fail.xml", Path("logs/uidump_fail.xml")),
               ("offline_favorites_v1.xml", Path("logs/offline_favorites_v1.xml")),
+              ("MyPrefers.xml", Path("logs/MyPrefers.xml")),
               ("patch-build.log", Path("logs/patch-build.log")),
           ]:
               if p.is_file():
@@ -349,7 +350,8 @@ jobs:
           {
             echo "## Mymoviebox — Offline Favorites & Folders ($TAG_NAME)"
             echo ""
-            echo "- 100% offline Favorites without login required"
+            echo "- 100% offline Favorites without login required (3-column grid matching Movies/Series)"
+            echo "- Toggle movie/series titles between Persian and English without login (persists across restarts)"
             echo "- Details modal folder picker (**همه / سینمایی / سریال / پوشه‌ها** tabs, create/rename/delete folders)"
             echo "- JSON Backup Export & Restore via Android Storage Access Framework"
             echo "- Pure Dalvik APK signed with v1/v2/v3; both \`universal\` and per-ABI packages included"

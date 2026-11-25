@@ -32,7 +32,6 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 import com.delfan.madp.Acts.activity_main;
 import com.delfan.madp.Adapter.CaAdFilm_DubleList;
-import com.delfan.madp.Other.b;
 import com.delfan.madp.Other.g;
 import com.delfan.madp.fragments.fr_favs;
 import java.io.BufferedReader;
@@ -93,7 +92,8 @@ public final class OfflineFavsController {
         final RecyclerView rvFolders = (RecyclerView) root.findViewById(Res.id(ctx, "RecyclerFolders_Frg5"));
         final RecyclerView rvFolderItems = (RecyclerView) root.findViewById(Res.id(ctx, "RecyclerFolderItems_Frg5"));
 
-        int span = b.q > 1 ? b.q : 3;
+        int span = Res.integer(ctx, "SpanCount", 3);
+        if (span < 1) span = 3;
 
         if (rvAll != null) {
             rvAll.setLayoutManager(new GridLayoutManager(ctx, span));

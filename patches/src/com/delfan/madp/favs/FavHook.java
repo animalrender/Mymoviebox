@@ -170,7 +170,7 @@ public final class FavHook {
         if (raw == null) return "";
         String s = raw.replace("IMDB", "").replace("imdb", "").replace(":", "").trim();
         if (s.equals("...") || s.equals("در حال دریافت")) return "";
-        return s;
+        return Res.toAsciiDigits(s);
     }
 
     private static String cleanPrefix(String raw, String prefixWord) {
