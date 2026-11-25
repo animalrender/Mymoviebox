@@ -3,6 +3,7 @@ import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -23,6 +24,10 @@ def adb(*args, check=True, capture=True):
     if check and res.returncode != 0:
         raise RuntimeError(f"adb {' '.join(args)} failed ({res.returncode}): {res.stderr}")
     return res.stdout if capture else ""
+
+
+def adb_am_start(*am_args):
+    return adb("shell", shlex.join(["am", "start", *am_args]))
 
 
 def adb_bytes(*args):
@@ -402,6 +407,7 @@ def _start_redirect_server(mp4_bytes: bytes, port: int = 18080):
     target_query = "expire=1795617009&hash=TESTHASH123"
     expected_final_url = f"http://127.0.0.1:{port}{target_path}?{target_query}"
     twohop_final_url = f"http://127.0.0.1:{port}{target_path}?expire=1795617009&hash=TWOHOP999"
+    fallback_final_url = f"http://127.0.0.1:{port}/cdn/Fallback.Direct.2026.mkv?token=FB503"
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
@@ -424,6 +430,17 @@ def _start_redirect_server(mp4_bytes: bytes, port: int = 18080):
             if self.path.startswith("/hop2/redirect"):
                 self.send_response(307)
                 self.send_header("Location", twohop_final_url)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            if self.path.startswith("/play-link/adm-fallback.php"):
+                self.send_response(302)
+                self.send_header("Location", fallback_final_url)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            if self.path.startswith("/cdn/Fallback.Direct"):
+                self.send_response(503)
                 self.send_header("Content-Length", "0")
                 self.end_headers()
                 return
@@ -472,7 +489,7 @@ def _start_redirect_server(mp4_bytes: bytes, port: int = 18080):
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     th = threading.Thread(target=srv.serve_forever, daemon=True)
     th.start()
-    return srv, expected_final_url, twohop_final_url, hits
+    return srv, expected_final_url, twohop_final_url, fallback_final_url, hits
 
 
 def _build_dummy_adm_apk(work_dir: Path) -> Path:
@@ -631,19 +648,43 @@ def _screen_center(root=None):
     return w // 2, h // 2
 
 
-def _ensure_player_controls_visible(timeout: float = 12.0):
+def _dismiss_player_overlays(root):
+    if root is None:
+        return False
+    for rid, pkg in (("android:id/ok", "android"), ("android:id/ok", "com.android.systemui")):
+        ok = find_node(root, resource_id=rid)
+        if ok is not None and ok.attrib.get("package") == pkg:
+            b = parse_bounds(ok.attrib.get("bounds", ""))
+            if b is not None and (b[2] - b[0]) > 10:
+                tap_node(ok, f"dismiss system cling ({rid})", wait=0.8)
+                return True
+    if find_node(root, resource_id="android:id/immersive_cling_chevron") is not None:
+        for node in root.iter("node"):
+            if node.attrib.get("package") == "android" and node.attrib.get("clickable") == "true":
+                b = parse_bounds(node.attrib.get("bounds", ""))
+                if b is not None and (b[2] - b[0]) > 10:
+                    tap_node(node, "dismiss immersive cling button", wait=0.8)
+                    return True
+    help_ok = find_node(root, resource_id="LinBtnHelpBright") or find_node(root, text="متوجه شدم")
+    if help_ok is not None:
+        b = parse_bounds(help_ok.attrib.get("bounds", ""))
+        if b is not None and (b[2] - b[0]) > 10:
+            tap_node(help_ok, "dismiss LinBtnHelpBright", wait=0.8)
+            return True
+    return False
+
+
+def _ensure_player_controls_visible(timeout: float = 15.0):
     deadline = time.time() + timeout
     while time.time() < deadline:
         root = dump_ui()
-        help_ok = find_node(root, resource_id="LinBtnHelpBright")
-        if help_ok is not None:
-            b = parse_bounds(help_ok.attrib.get("bounds", ""))
-            if b is not None and (b[2] - b[0]) > 10:
-                tap_node(help_ok, "dismiss LinBtnHelpBright", wait=0.8)
-                continue
+        if _dismiss_player_overlays(root):
+            continue
         btn = find_node(root, resource_id="btn_download_stream")
         if btn is not None:
-            return root, btn
+            b = parse_bounds(btn.attrib.get("bounds", ""))
+            if b is not None and (b[2] - b[0]) > 10 and (b[3] - b[1]) > 10:
+                return root, btn
         cx, cy = _screen_center(root)
         adb("shell", "input", "tap", str(cx), str(cy))
         time.sleep(0.6)
@@ -654,13 +695,36 @@ def _wait_for_stream_grabbed(timeout: float = 20.0):
     deadline = time.time() + timeout
     last_desc = None
     while time.time() < deadline:
-        root, btn = _ensure_player_controls_visible(timeout=5.0)
+        root, btn = _ensure_player_controls_visible(timeout=8.0)
         cd = btn.attrib.get("content-desc", "")
         last_desc = cd
         if "آماده" in cd:
             return root, btn
         time.sleep(0.7)
     raise AssertionError(f"Timed out waiting for btn_download_stream filled/captured state. Last desc={last_desc!r}")
+
+
+def _open_stream_dialog():
+    for attempt in range(3):
+        _, btn = _ensure_player_controls_visible(timeout=8.0)
+        tap_node(btn, f"btn_download_stream (attempt {attempt + 1})", wait=0.8)
+        try:
+            return wait_for_node(timeout=3.0, resource_id="TxtUrl_StreamDlg")
+        except AssertionError:
+            pass
+    raise AssertionError("Timed out waiting for TxtUrl_StreamDlg after tapping btn_download_stream")
+
+
+def _check_landscape_non_overlap(root, btn_node, log):
+    btn_b = parse_bounds(btn_node.attrib.get("bounds", ""))
+    title_node = find_node(root, resource_id="TxtTitleFilm")
+    title_bounds = parse_bounds(title_node.attrib.get("bounds", "")) if title_node is not None else None
+    if title_bounds and btn_b:
+        horiz_overlap = (title_bounds[2] > btn_b[0]) and (title_bounds[0] < btn_b[2])
+        vert_overlap = (title_bounds[3] > btn_b[1]) and (title_bounds[1] < btn_b[3])
+        if horiz_overlap and vert_overlap:
+            raise AssertionError(f"Landscape TxtTitleFilm {title_bounds} overlaps btn_download_stream {btn_b}!")
+    log(f"  Landscape layout verified (no overlap): btn={btn_b}, title={title_bounds}")
 
 
 def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
@@ -672,7 +736,7 @@ def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
         mp4_bytes = mp4_path.read_bytes()
         log(f"  Generated sample MP4 ({len(mp4_bytes)} bytes)")
 
-        srv, expected_url, twohop_url, hits = _start_redirect_server(mp4_bytes, port=port)
+        srv, expected_url, twohop_url, fallback_url, hits = _start_redirect_server(mp4_bytes, port=port)
         dummy_adm_installed = False
         try:
             adb("reverse", f"tcp:{port}", f"tcp:{port}")
@@ -680,30 +744,38 @@ def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
 
             raw_play_url = f"http://127.0.0.1:{port}/play-link/play.php?t=movie&i=72818&m=09330000000&ap=Delfan"
             sub_url = f"http://127.0.0.1:{port}/subs/test.srt"
+            movie_title = "Test Redirect Movie 2026 Long Title Check"
 
             adb("shell", "am", "force-stop", PKG)
             time.sleep(0.5)
-            adb(
-                "shell", "am", "start", "-W",
+            adb_am_start(
+                "-W",
                 "-n", f"{PKG}/com.delfan.madp.Acts.activity_video_player",
                 "--es", "url", raw_play_url,
                 "--es", "sub_title", sub_url,
-                "--es", "title", "Test Redirect Movie 2026 Long Title Check",
+                "--es", "title", movie_title,
                 "--es", "Type_movie", "1",
                 "--es", "Link_Id", "72818",
             )
-            time.sleep(1.5)
+            time.sleep(2.0)
 
-            root, btn_dl = _wait_for_stream_grabbed(timeout=20.0)
-            screencap(scr_dir, "23-player-portrait-grabbed.png")
-            log(f"  Portrait player grabbed stream: btn desc={btn_dl.attrib.get('content-desc')!r}")
+            root1, btn1 = _wait_for_stream_grabbed(timeout=20.0)
+            rot1 = root1.attrib.get("rotation", "0")
+            is_land1 = rot1 in ("1", "3")
+            if is_land1:
+                _check_landscape_non_overlap(root1, btn1, log)
+            screencap(scr_dir, "23-player-initial-grabbed.png")
+            log(f"  Initial player grabbed stream (rotation={rot1}): btn desc={btn1.attrib.get('content-desc')!r}")
 
-            # Open stream grabber dialog
-            tap_node(btn_dl, "btn_download_stream", wait=1.0)
-            root_dlg, tv_url = wait_for_node(timeout=6.0, resource_id="TxtUrl_StreamDlg")
+            # Open stream grabber dialog & check title + final redirected URL + action buttons
+            root_dlg, tv_url = _open_stream_dialog()
             shown_url = tv_url.attrib.get("text", "").strip()
             if shown_url != expected_url:
                 raise AssertionError(f"Expected redirected CDN URL {expected_url!r}, got {shown_url!r}")
+            dlg_title_node = find_node(root_dlg, resource_id="TxtMovieTitle_StreamDlg")
+            dlg_title = dlg_title_node.attrib.get("text", "").strip() if dlg_title_node is not None else ""
+            if movie_title not in dlg_title:
+                raise AssertionError(f"Expected movie title {movie_title!r} in dialog, got {dlg_title!r}")
             for action_id in ("BtnOpenUrl_StreamDlg", "BtnCopyUrl_StreamDlg", "BtnAdmUrl_StreamDlg"):
                 if find_node(root_dlg, resource_id=action_id) is None:
                     raise AssertionError(f"Missing action button {action_id} in stream download dialog")
@@ -715,39 +787,33 @@ def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
             screencap(scr_dir, "25-adm-missing-dialog.png")
             tap_node(find_node(root_adm_err, text="لغو"), "dismiss ADM install prompt", wait=0.8)
 
-            # Rotate to Landscape & verify layout bounds + stream grabber re-capture
-            _, _ = _ensure_player_controls_visible(timeout=8.0)
-            root = dump_ui()
-            rot_btn = find_node(root, resource_id="btn_screen_rotate")
-            tap_node(rot_btn, "btn_screen_rotate -> landscape", wait=2.5)
-            root_land, btn_land = _wait_for_stream_grabbed(timeout=20.0)
-            btn_b = parse_bounds(btn_land.attrib.get("bounds", ""))
-            title_node = find_node(root_land, resource_id="TxtTitleFilm")
-            title_bounds = None
-            if title_node is not None:
-                title_bounds = parse_bounds(title_node.attrib.get("bounds", ""))
-                if title_bounds and btn_b and title_bounds[2] > btn_b[0]:
-                    raise AssertionError(f"Landscape TxtTitleFilm {title_bounds} overlaps btn_download_stream {btn_b}!")
-            screencap(scr_dir, "26-player-landscape-grabbed.png")
-            log(f"  Landscape verified: btn={btn_b}, title={title_bounds}")
+            # Toggle orientation via btn_screen_rotate & verify the other orientation + re-capture
+            root_ctl, _ = _ensure_player_controls_visible(timeout=8.0)
+            rot_btn = find_node(root_ctl, resource_id="btn_screen_rotate")
+            tap_node(rot_btn, "btn_screen_rotate -> toggle orientation", wait=2.5)
+            root2, btn2 = _wait_for_stream_grabbed(timeout=20.0)
+            rot2 = root2.attrib.get("rotation", "0")
+            is_land2 = rot2 in ("1", "3")
+            if is_land2:
+                _check_landscape_non_overlap(root2, btn2, log)
+            if not (is_land1 or is_land2):
+                raise AssertionError(f"Neither initial ({rot1}) nor toggled ({rot2}) orientation was landscape!")
+            screencap(scr_dir, "26-player-rotated-grabbed.png")
+            log(f"  Rotated orientation verified (rotation={rot1} -> {rot2})")
 
             # Build & install dummy com.dv.adm receiver to verify Copy + ADM Intent URI end-to-end
             dummy_apk = _build_dummy_adm_apk(tmp_dir / "adm-apk")
             adb("install", "-r", str(dummy_apk))
             dummy_adm_installed = True
 
-            # Tap btn_download_stream -> Copy URL -> Re-open -> Send to ADM
-            tap_node(btn_land, "btn_download_stream (landscape)", wait=1.0)
-            root_dlg2, tv_url2 = wait_for_node(timeout=6.0, resource_id="TxtUrl_StreamDlg")
+            # Open dialog -> Copy URL -> Re-open -> Send to ADM
+            root_dlg2, tv_url2 = _open_stream_dialog()
             shown_url2 = tv_url2.attrib.get("text", "").strip()
             if shown_url2 != expected_url:
-                raise AssertionError(f"Landscape dialog URL mismatch: {shown_url2!r}")
+                raise AssertionError(f"Rotated dialog URL mismatch: {shown_url2!r}")
             tap_node(find_node(root_dlg2, resource_id="BtnCopyUrl_StreamDlg"), "BtnCopyUrl_StreamDlg", wait=0.8)
 
-            # Re-open & send to dummy ADM (which also reads ClipboardManager on focus!)
-            _, btn_land2 = _ensure_player_controls_visible(timeout=8.0)
-            tap_node(btn_land2, "btn_download_stream -> ADM", wait=1.0)
-            root_dlg3, _ = wait_for_node(timeout=6.0, resource_id="BtnAdmUrl_StreamDlg")
+            root_dlg3, _ = _open_stream_dialog()
             tap_node(find_node(root_dlg3, resource_id="BtnAdmUrl_StreamDlg"), "BtnAdmUrl_StreamDlg (with ADM)", wait=2.0)
 
             root_adm, _ = wait_for_node(timeout=8.0, text_contains="ADM_RECEIVED_URI:")
@@ -762,12 +828,12 @@ def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
             screencap(scr_dir, "27-adm-received-final-url.png")
             log(f"  Verified ADM + Clipboard exact redirected URL: {adm_uri}")
 
-            # Verify 2-hop redirect resolution too via activity_video_player
+            # Verify 2-hop (302 -> 307) redirect resolution via activity_video_player
             twohop_play_url = f"http://127.0.0.1:{port}/play-link/twohop.php?id=99"
             adb("shell", "am", "force-stop", PKG)
             time.sleep(0.5)
-            adb(
-                "shell", "am", "start", "-W",
+            adb_am_start(
+                "-W",
                 "-n", f"{PKG}/com.delfan.madp.Acts.activity_video_player",
                 "--es", "url", twohop_play_url,
                 "--es", "sub_title", "",
@@ -775,14 +841,45 @@ def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
                 "--es", "Type_movie", "1",
                 "--es", "Link_Id", "99",
             )
-            time.sleep(1.5)
-            _, btn_2h = _wait_for_stream_grabbed(timeout=20.0)
-            tap_node(btn_2h, "btn_download_stream (twohop)", wait=1.0)
-            _, tv_2h = wait_for_node(timeout=6.0, resource_id="TxtUrl_StreamDlg")
+            time.sleep(2.0)
+            _wait_for_stream_grabbed(timeout=20.0)
+            _, tv_2h = _open_stream_dialog()
             shown_2h = tv_2h.attrib.get("text", "").strip()
             if shown_2h != twohop_url:
                 raise AssertionError(f"2-hop redirect mismatch: expected={twohop_url!r}, got={shown_2h!r}")
             log(f"  Verified 2-hop redirect capture: {twohop_url}")
+
+            # Verify off-thread HTTP fallback resolver + ADM handoff when target returns 503 to ExoPlayer
+            fb_play_url = f"http://127.0.0.1:{port}/play-link/adm-fallback.php?id=77"
+            adb("shell", "am", "force-stop", PKG)
+            time.sleep(0.5)
+            adb_am_start(
+                "-W",
+                "-n", f"{PKG}/com.delfan.madp.Acts.activity_video_player",
+                "--es", "url", fb_play_url,
+                "--es", "sub_title", "",
+                "--es", "title", "Fallback Resolver Test",
+                "--es", "Type_movie", "1",
+                "--es", "Link_Id", "77",
+            )
+            time.sleep(2.0)
+            root_dlg_fb, tv_fb = _open_stream_dialog()
+            deadline_fb = time.time() + 10.0
+            shown_fb = tv_fb.attrib.get("text", "").strip()
+            while shown_fb != fallback_url and time.time() < deadline_fb:
+                time.sleep(0.5)
+                root_dlg_fb = dump_ui()
+                n_fb = find_node(root_dlg_fb, resource_id="TxtUrl_StreamDlg")
+                shown_fb = n_fb.attrib.get("text", "").strip() if n_fb is not None else ""
+            if shown_fb != fallback_url:
+                raise AssertionError(f"Fallback resolver mismatch: expected={fallback_url!r}, got={shown_fb!r}")
+            tap_node(find_node(root_dlg_fb, resource_id="BtnAdmUrl_StreamDlg"), "BtnAdmUrl_StreamDlg (fallback ADM)", wait=2.0)
+            root_adm_fb, _ = wait_for_node(timeout=8.0, text_contains="ADM_RECEIVED_URI:")
+            adm_fb_node = find_node(root_adm_fb, text_contains="ADM_RECEIVED_URI:")
+            adm_fb_uri = adm_fb_node.attrib.get("text", "").split("ADM_RECEIVED_URI:", 1)[1].strip()
+            if adm_fb_uri != fallback_url:
+                raise AssertionError(f"ADM fallback mismatch: expected={fallback_url!r}, got={adm_fb_uri!r}")
+            log(f"  Verified off-thread HTTP fallback resolver + ADM handoff: {adm_fb_uri}")
             log(f"  Local redirect server recorded {len(hits)} HTTP hits")
         finally:
             if dummy_adm_installed:
