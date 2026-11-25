@@ -463,7 +463,7 @@ def patch_title_lang_hooks(decoded_dir: Path):
     sp_cb_body = m_sp_cb.group(2)
     pat_sp_cb = re.compile(
         r"([ \t]*sput-object\s+[vp]\d+,\s*Lcom/delfan/madp/Other/b;->f:Ljava/lang/String;\s*\n"
-        r"(?:[ \t]*(?:\.line[^\n]*|#[^\n]*)?\n)*)"
+        r"(?:[ \t]*(?:\.line[^\n]*|\.catch[^\n]*|:try_end_[^\n]*|#[^\n]*)?\n)*)"
         r"([ \t]*const-string\s+(v\d+),\s*\"\"\s*\n)",
         re.MULTILINE,
     )
