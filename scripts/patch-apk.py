@@ -532,6 +532,224 @@ def patch_title_lang_hooks(decoded_dir: Path):
     print(f"  patched {p_main.relative_to(decoded_dir)}")
 
 
+def patch_player_controller_layouts(decoded_dir: Path):
+    import xml.etree.ElementTree as ET
+
+    insert_btn = (
+        '\n    <ImageView'
+        ' android:id="@+id/btn_download_stream"'
+        ' android:padding="@dimen/_5sdp"'
+        ' android:focusable="true"'
+        ' android:clickable="true"'
+        ' android:layout_width="@dimen/_32sdp"'
+        ' android:layout_height="@dimen/_32sdp"'
+        ' android:layout_margin="@dimen/_8sdp"'
+        ' android:src="@drawable/ic_player_download_outline"'
+        ' android:contentDescription="دانلود یا کپی لینک مستقیم"'
+        ' app:layout_constraintBottom_toBottomOf="@id/header"'
+        ' app:layout_constraintEnd_toStartOf="@id/btn_subtitles"'
+        ' app:layout_constraintTop_toTopOf="@id/header"'
+        ' app:tint="@color/white" />'
+    )
+
+    for rel in (
+        "res/layout/custom_exo_controller_view.xml",
+        "res/layout-land/custom_exo_controller_view.xml",
+    ):
+        xml_path = decoded_dir / rel
+        if not xml_path.is_file():
+            raise RuntimeError(f"Missing decoded player controller layout: {xml_path}")
+        text = xml_path.read_text(encoding="utf-8")
+        if "btn_download_stream" in text:
+            raise RuntimeError(f"btn_download_stream already exists in {rel}")
+
+        # 1. Insert btn_download_stream right after btn_subtitles </LinearLayout>
+        sub_pat = re.compile(
+            r'(<LinearLayout\b[^>]*android:id="@id/btn_subtitles"[^>]*>.*?</LinearLayout>)',
+            re.DOTALL,
+        )
+        m_sub = sub_pat.search(text)
+        if not m_sub:
+            raise RuntimeError(f"Could not find btn_subtitles LinearLayout in {rel}")
+        text = text[: m_sub.end(1)] + insert_btn + text[m_sub.end(1) :]
+
+        # 2. Keep TxtTitleFilm bounded cleanly to the left of btn_download_stream
+        title_pat = re.compile(r'(<TextView\b[^>]*android:id="@id/TxtTitleFilm"[^>]*?)(/?>)', re.DOTALL)
+        m_title = title_pat.search(text)
+        if not m_title:
+            raise RuntimeError(f"Could not find TxtTitleFilm in {rel}")
+        tag_head, tag_end = m_title.group(1), m_title.group(2)
+        if "layout-land" in rel:
+            tag_head = re.sub(r'android:layout_width="[^"]*"', 'android:layout_width="0.0dip"', tag_head)
+            if "android:ellipsize=" not in tag_head:
+                tag_head += ' android:ellipsize="end"'
+            if "app:layout_constrainedWidth=" not in tag_head:
+                tag_head += ' app:layout_constrainedWidth="true"'
+            if "app:layout_constraintHorizontal_bias=" not in tag_head:
+                tag_head += ' app:layout_constraintHorizontal_bias="0.0"'
+        if "app:layout_constraintEnd_toStartOf=" not in tag_head:
+            tag_head += ' app:layout_constraintEnd_toStartOf="@id/btn_download_stream"'
+        text = text[: m_title.start()] + tag_head + tag_end + text[m_title.end() :]
+
+        ET.fromstring(text)
+        xml_path.write_text(text, encoding="utf-8")
+        print(f"  patched {rel}")
+
+
+def patch_video_player(decoded_dir: Path):
+    p = find_smali(decoded_dir, "com/delfan/madp/Acts/activity_video_player.smali")
+    text = p.read_text(encoding="utf-8")
+
+    # 1. Hook ExoPlayer$Builder in onCreate right before .build()
+    m_oc = re.search(
+        r"(^\.method[^\n]*\sonCreate\(Landroid/os/Bundle;\)V\n)(.*?)(^\.end method)",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not m_oc:
+        raise RuntimeError("onCreate(Bundle)V not found in activity_video_player.smali")
+    oc_body = m_oc.group(2)
+    pat_builder = re.compile(
+        r"(^[ \t]*iget-object\s+(v\d+),\s*[vp]\d+,\s*Lcom/delfan/madp/Acts/activity_video_player;->trackSelector:Landroidx/media3/exoplayer/trackselection/DefaultTrackSelector;\s*\n"
+        r"(?:[ \t]*(?:\.line[^\n]*|#[^\n]*)?\n)*"
+        r"[ \t]*invoke-virtual\s+\{(v\d+),\s*\2\},\s*Landroidx/media3/exoplayer/ExoPlayer\$Builder;->setTrackSelector\(Landroidx/media3/exoplayer/trackselection/TrackSelector;\)Landroidx/media3/exoplayer/ExoPlayer\$Builder;\s*\n"
+        r"(?:[ \t]*(?:\.line[^\n]*|#[^\n]*)?\n)*"
+        r"[ \t]*move-result-object\s+\3\s*\n)"
+        r"((?:[ \t]*(?:\.line[^\n]*|#[^\n]*)?\n)*"
+        r"[ \t]*invoke-virtual\s+\{\3\},\s*Landroidx/media3/exoplayer/ExoPlayer\$Builder;->build\(\)Landroidx/media3/exoplayer/ExoPlayer;)",
+        re.MULTILINE,
+    )
+    m_bld = pat_builder.search(oc_body)
+    if not m_bld:
+        raise RuntimeError("Could not locate ExoPlayer$Builder.setTrackSelector -> build in activity_video_player.onCreate")
+    reg_tmp = m_bld.group(2)
+    reg_bld = m_bld.group(3)
+    if int(reg_tmp[1:]) >= 16 or int(reg_bld[1:]) >= 16 or reg_tmp == reg_bld:
+        raise RuntimeError(f"Unexpected registers in ExoPlayer$Builder hook: tmp={reg_tmp}, bld={reg_bld}")
+    builder_hook = (
+        f"    move-object/from16 {reg_tmp}, p0\n"
+        f"    invoke-static {{{reg_tmp}, {reg_bld}}}, Lcom/delfan/madp/favs/StreamGrabber;->configureBuilder(Landroid/app/Activity;Landroidx/media3/exoplayer/ExoPlayer$Builder;)Landroidx/media3/exoplayer/ExoPlayer$Builder;\n"
+        f"    move-result-object {reg_bld}\n"
+    )
+    oc_body = oc_body[: m_bld.end(1)] + builder_hook + m_bld.group(4) + oc_body[m_bld.end(4) :]
+    text = text[: m_oc.start(2)] + oc_body + text[m_oc.end(2) :]
+
+    # 2. Hook startPlayer(String, String)V entry right before MediaItem$Builder instantiation
+    m_sp = re.search(
+        r"(^\.method[^\n]*\sstartPlayer\(Ljava/lang/String;Ljava/lang/String;\)V\n)(.*?)(^\.end method)",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not m_sp:
+        raise RuntimeError("startPlayer(String, String)V not found in activity_video_player.smali")
+    sp_body = m_sp.group(2)
+    m_sp_ins = re.search(
+        r"(^[ \t]*new-instance\s+v\d+,\s*Landroidx/media3/common/MediaItem\$Builder;)",
+        sp_body,
+        re.MULTILINE,
+    )
+    if not m_sp_ins:
+        raise RuntimeError("Could not find MediaItem$Builder in startPlayer")
+    sp_hook = (
+        "    invoke-static {p0, p1, p2}, Lcom/delfan/madp/favs/StreamGrabber;->onStartPlayer(Landroid/app/Activity;Ljava/lang/String;Ljava/lang/String;)V\n\n"
+    )
+    sp_body = sp_body[: m_sp_ins.start(1)] + sp_hook + sp_body[m_sp_ins.start(1) :]
+    text = text[: m_sp.start(2)] + sp_body + text[m_sp.end(2) :]
+
+    # 3. Hook onDestroy()V right before super.onDestroy()
+    m_od = re.search(
+        r"(^\.method[^\n]*\sonDestroy\(\)V\n)(.*?)(^\.end method)",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not m_od:
+        raise RuntimeError("onDestroy()V not found in activity_video_player.smali")
+    od_body = m_od.group(2)
+    m_od_ins = re.search(
+        r"(^[ \t]*invoke-super\s+\{p0\},\s*Landroidx/appcompat/app/AppCompatActivity;->onDestroy\(\)V)",
+        od_body,
+        re.MULTILINE,
+    )
+    if not m_od_ins:
+        raise RuntimeError("Could not find super.onDestroy() in onDestroy")
+    od_hook = "    invoke-static {p0}, Lcom/delfan/madp/favs/StreamGrabber;->onDestroyPlayer(Landroid/app/Activity;)V\n\n"
+    od_body = od_body[: m_od_ins.start(1)] + od_hook + od_body[m_od_ins.start(1) :]
+    text = text[: m_od.start(2)] + od_body + text[m_od.end(2) :]
+
+    p.write_text(text, encoding="utf-8")
+    print(f"  patched {p.relative_to(decoded_dir)}")
+
+    # 4. Hook activity_video_player$k.onPlaybackStateChanged(I)V for STATE_READY fallback
+    pk = find_smali(decoded_dir, "com/delfan/madp/Acts/activity_video_player$k.smali")
+    tk = pk.read_text(encoding="utf-8")
+    m_ps = re.search(
+        r"(^\.method[^\n]*\sonPlaybackStateChanged\(I\)V\n)(.*?)(^\.end method)",
+        tk,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not m_ps:
+        raise RuntimeError("onPlaybackStateChanged(I)V not found in activity_video_player$k.smali")
+    ps_body = m_ps.group(2)
+    m_ps_loc = re.search(r"^[ \t]*\.locals\s+(\d+)", ps_body, re.MULTILINE)
+    if not m_ps_loc or int(m_ps_loc.group(1)) < 1:
+        raise RuntimeError(f"Expected >= 1 local in $k.onPlaybackStateChanged, got {m_ps_loc.group(0) if m_ps_loc else None}")
+    m_ps_ins = re.search(
+        r"(^[ \t]*invoke-static\s+\{p0,\s*p1\},\s*Landroidx/media3/common/[^;]+;->[^(]+\(Landroidx/media3/common/Player\$Listener;I\)V)",
+        ps_body,
+        re.MULTILINE,
+    )
+    if not m_ps_ins:
+        raise RuntimeError("Could not find Player$Listener.onPlaybackStateChanged default super call in $k")
+    ps_hook = (
+        "    iget-object v0, p0, Lcom/delfan/madp/Acts/activity_video_player$k;->b:Lcom/delfan/madp/Acts/activity_video_player;\n"
+        "    invoke-static {v0, p1}, Lcom/delfan/madp/favs/StreamGrabber;->onPlaybackStateChanged(Landroid/app/Activity;I)V\n\n"
+    )
+    ps_body = ps_body[: m_ps_ins.start(1)] + ps_hook + ps_body[m_ps_ins.start(1) :]
+    tk = tk[: m_ps.start(2)] + ps_body + tk[m_ps.end(2) :]
+    pk.write_text(tk, encoding="utf-8")
+    print(f"  patched {pk.relative_to(decoded_dir)}")
+
+
+def patch_show_links_adm(decoded_dir: Path):
+    p = find_smali(decoded_dir, "com/delfan/madp/Acts/activity_show_links.smali")
+    text = p.read_text(encoding="utf-8")
+
+    m_adm = re.search(
+        r"(^\.method[^\n]*\sSendDownloaderAdm\(Landroid/content/Context;\)V\n)(.*?)(^\.end method)",
+        text,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not m_adm:
+        raise RuntimeError("SendDownloaderAdm(Context)V not found in activity_show_links.smali")
+    body = m_adm.group(2)
+
+    pat_uri = re.compile(
+        r"(^[ \t]*invoke-static\s+\{(v\d+)\},\s*[^\n]+->[^\n]+\(Ljava/lang/(?:Object|String);\)Landroid/net/Uri;\s*\n"
+        r"(?:[ \t]*(?:\.line[^\n]*|#[^\n]*)?\n)*"
+        r"[ \t]*move-result-object\s+(v\d+)\s*\n"
+        r"(?:[ \t]*(?:\.line[^\n]*|#[^\n]*)?\n)*"
+        r"[ \t]*invoke-direct\s+\{v\d+,\s*v\d+,\s*\3\},\s*Landroid/content/Intent;-><init>\(Ljava/lang/String;Landroid/net/Uri;\)V\s*\n)",
+        re.MULTILINE,
+    )
+    matches = list(pat_uri.finditer(body))
+    if len(matches) != 1:
+        raise RuntimeError(f"Expected 1 Uri.parse -> Intent.<init> in SendDownloaderAdm, found {len(matches)}")
+
+    m = matches[0]
+    reg_url = m.group(2)
+    if int(reg_url[1:]) >= 16:
+        raise RuntimeError(f"Unexpected high register {reg_url} in SendDownloaderAdm")
+
+    adm_hook = (
+        f"    invoke-static {{p1, {reg_url}}}, Lcom/delfan/madp/favs/StreamGrabber;->openAdmFromMenu(Landroid/content/Context;Ljava/lang/Object;)V\n"
+        f"    return-void\n\n"
+    )
+    body = body[: m.start(1)] + adm_hook + body[m.start(1) :]
+    text = text[: m_adm.start(2)] + body + text[m_adm.end(2) :]
+    p.write_text(text, encoding="utf-8")
+    print(f"  patched {p.relative_to(decoded_dir)} (reg_url={reg_url})")
+
+
 def inject_classes8_dex(unsigned_apk: Path, patch_dex: Path, out_apk: Path):
     with zipfile.ZipFile(unsigned_apk, "r") as zin:
         names = zin.namelist()
@@ -660,6 +878,7 @@ def main():
 
     print("3/6 Overlaying custom layouts, drawables, and strings ...")
     overlay_resources(repo_root, decoded_dir)
+    patch_player_controller_layouts(decoded_dir)
 
     print("4/6 Patching smali hooks ...")
     patch_fr_favs(decoded_dir)
@@ -667,6 +886,8 @@ def main():
     patch_details_fav_click(decoded_dir)
     patch_details_response_hook(decoded_dir)
     patch_title_lang_hooks(decoded_dir)
+    patch_video_player(decoded_dir)
+    patch_show_links_adm(decoded_dir)
 
     print("5/6 Rebuilding APK and injecting classes8.dex ...")
     rebuilt_apk = work_dir / "rebuilt-no-dex8.apk"
