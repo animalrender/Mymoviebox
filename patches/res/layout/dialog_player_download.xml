@@ -1,128 +1,257 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:fillViewport="true">
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="6dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center"
+        android:background="@drawable/radius"
         android:orientation="vertical"
-        android:padding="10dp">
+        android:padding="12dp">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <TextView
+                android:id="@+id/BtnClose_StreamDlg"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:layout_alignParentLeft="true"
+                android:layout_centerVertical="true"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="@font/sans"
+                android:gravity="center"
+                android:text="✕"
+                android:textColor="@color/TxtcolorHome2"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/TxtHeader_StreamDlg"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_centerVertical="true"
+                android:layout_toRightOf="@id/BtnClose_StreamDlg"
+                android:fontFamily="@font/sans"
+                android:gravity="right"
+                android:text="گربر لینک‌های استریم"
+                android:textColor="@color/TxtcolorHome"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+        </RelativeLayout>
+
+        <TextView
+            android:id="@+id/TxtMovieTitle_StreamDlg"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="end"
+            android:fontFamily="@font/sans"
+            android:gravity="right"
+            android:maxLines="1"
+            android:textColor="@color/TxtcolorHome2"
+            android:textSize="11sp"
+            android:visibility="gone" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="6dp"
+            android:background="@color/ViewHBtnC" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/radius"
-            android:orientation="vertical"
-            android:padding="14dp">
-
-            <RelativeLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content">
-
-                <TextView
-                    android:id="@+id/BtnClose_StreamDlg"
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
-                    android:layout_alignParentLeft="true"
-                    android:layout_centerVertical="true"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:fontFamily="@font/sans"
-                    android:gravity="center"
-                    android:text="✕"
-                    android:textColor="@color/TxtcolorHome2"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/TxtHeader_StreamDlg"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_centerVertical="true"
-                    android:layout_toRightOf="@id/BtnClose_StreamDlg"
-                    android:fontFamily="@font/sans"
-                    android:gravity="right"
-                    android:text="لینک مستقیم استریم"
-                    android:textColor="@color/TxtcolorHome"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
-            </RelativeLayout>
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
             <TextView
-                android:id="@+id/TxtMovieTitle_StreamDlg"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:ellipsize="end"
+                android:id="@+id/BtnDialogGrabberToggle_StreamDlg"
+                android:layout_width="wrap_content"
+                android:layout_height="26dp"
+                android:background="@drawable/stream_toggle_on_bg"
+                android:clickable="true"
+                android:focusable="true"
                 android:fontFamily="@font/sans"
-                android:gravity="right"
-                android:maxLines="2"
-                android:textColor="@color/TxtcolorHome2"
-                android:textSize="12sp"
-                android:visibility="gone" />
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_marginTop="10dp"
-                android:layout_marginBottom="10dp"
-                android:background="@color/ViewHBtnC" />
+                android:gravity="center"
+                android:paddingLeft="10dp"
+                android:paddingRight="10dp"
+                android:text="گربر: روشن"
+                android:textColor="#FF2E7D32"
+                android:textSize="11sp"
+                android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/TxtStatus_StreamDlg"
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_marginLeft="8dp"
+                android:layout_weight="1"
                 android:fontFamily="@font/sans"
                 android:gravity="right"
                 android:text="لینک نهایی آماده است"
                 android:textColor="@color/BtnPopLogin"
                 android:textSize="12sp"
                 android:textStyle="bold" />
+        </LinearLayout>
+
+        <HorizontalScrollView
+            android:id="@+id/RowFilters_StreamDlg"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:layoutDirection="rtl"
+            android:scrollbars="none">
 
             <LinearLayout
-                android:layout_width="match_parent"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:background="@drawable/stream_url_box_bg"
-                android:orientation="vertical"
-                android:padding="10dp">
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
                 <TextView
-                    android:id="@+id/TxtUrl_StreamDlg"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="middle"
-                    android:gravity="left"
-                    android:maxLines="4"
+                    android:id="@+id/TabFilterAll_StreamDlg"
+                    android:layout_width="wrap_content"
+                    android:layout_height="26dp"
+                    android:layout_marginEnd="6dp"
+                    android:background="@drawable/stream_btn_primary_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/sans"
+                    android:gravity="center"
+                    android:paddingLeft="10dp"
+                    android:paddingRight="10dp"
+                    android:text="همه"
+                    android:textColor="#FFFFFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/TabFilterVideo_StreamDlg"
+                    android:layout_width="wrap_content"
+                    android:layout_height="26dp"
+                    android:layout_marginEnd="6dp"
+                    android:background="@drawable/stream_btn_secondary_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/sans"
+                    android:gravity="center"
+                    android:paddingLeft="10dp"
+                    android:paddingRight="10dp"
+                    android:text="ویدیو"
                     android:textColor="@color/TxtcolorHome"
-                    android:textDirection="ltr"
-                    android:textIsSelectable="true"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/TabFilterStream_StreamDlg"
+                    android:layout_width="wrap_content"
+                    android:layout_height="26dp"
+                    android:layout_marginEnd="6dp"
+                    android:background="@drawable/stream_btn_secondary_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/sans"
+                    android:gravity="center"
+                    android:paddingLeft="10dp"
+                    android:paddingRight="10dp"
+                    android:text="HLS / DASH"
+                    android:textColor="@color/TxtcolorHome"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/TabFilterExtra_StreamDlg"
+                    android:layout_width="wrap_content"
+                    android:layout_height="26dp"
+                    android:background="@drawable/stream_btn_secondary_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:fontFamily="@font/sans"
+                    android:gravity="center"
+                    android:paddingLeft="10dp"
+                    android:paddingRight="10dp"
+                    android:text="صدا / زیرنویس"
+                    android:textColor="@color/TxtcolorHome"
                     android:textSize="11sp" />
             </LinearLayout>
+        </HorizontalScrollView>
+
+        <ScrollView
+            android:id="@+id/ScrollLinks_StreamDlg"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:fadeScrollbars="false">
+
+            <LinearLayout
+                android:id="@+id/ListLinks_StreamDlg"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </ScrollView>
+
+        <TextView
+            android:id="@+id/TxtEmptyLinks_StreamDlg"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:fontFamily="@font/sans"
+            android:gravity="center"
+            android:padding="10dp"
+            android:text="هنوز لینکی از شبکه دریافت نشده است"
+            android:textColor="@color/TxtcolorHome2"
+            android:textSize="12sp"
+            android:visibility="gone" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:fontFamily="@font/sans"
+            android:gravity="right"
+            android:text="لینک انتخاب‌شده:"
+            android:textColor="@color/TxtcolorHome2"
+            android:textSize="10sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:background="@drawable/stream_url_box_bg"
+            android:orientation="vertical"
+            android:padding="7dp">
 
             <TextView
-                android:id="@+id/BtnOpenUrl_StreamDlg"
+                android:id="@+id/TxtUrl_StreamDlg"
                 android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:layout_marginTop="12dp"
-                android:background="@drawable/stream_btn_primary_bg"
-                android:clickable="true"
-                android:focusable="true"
-                android:fontFamily="@font/sans"
-                android:gravity="center"
-                android:text="باز کردن لینک"
-                android:textColor="#FFFFFF"
-                android:textSize="13sp"
-                android:textStyle="bold" />
+                android:layout_height="wrap_content"
+                android:ellipsize="middle"
+                android:gravity="left"
+                android:maxLines="2"
+                android:textColor="@color/TxtcolorHome"
+                android:textDirection="ltr"
+                android:textIsSelectable="true"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
 
             <TextView
                 android:id="@+id/BtnCopyUrl_StreamDlg"
-                android:layout_width="match_parent"
-                android:layout_height="42dp"
-                android:layout_marginTop="8dp"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_marginRight="6dp"
+                android:layout_weight="1"
                 android:background="@drawable/stream_btn_secondary_bg"
                 android:clickable="true"
                 android:focusable="true"
@@ -130,38 +259,53 @@
                 android:gravity="center"
                 android:text="کپی لینک"
                 android:textColor="@color/TxtcolorHome"
-                android:textSize="13sp"
+                android:textSize="12sp"
                 android:textStyle="bold" />
 
-            <LinearLayout
-                android:id="@+id/BtnAdmUrl_StreamDlg"
-                android:layout_width="match_parent"
-                android:layout_height="44dp"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/radius_bg_item_pop_btn"
+            <TextView
+                android:id="@+id/BtnOpenUrl_StreamDlg"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1"
+                android:background="@drawable/stream_btn_primary_bg"
                 android:clickable="true"
                 android:focusable="true"
+                android:fontFamily="@font/sans"
                 android:gravity="center"
-                android:orientation="horizontal"
-                android:paddingLeft="12dp"
-                android:paddingRight="12dp">
+                android:text="باز کردن لینک"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+        </LinearLayout>
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="@font/sans"
-                    android:gravity="center"
-                    android:text="دانلود مستقیم با ADM"
-                    android:textColor="#FFFFFF"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
+        <LinearLayout
+            android:id="@+id/BtnAdmUrl_StreamDlg"
+            android:layout_width="match_parent"
+            android:layout_height="38dp"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/radius_bg_item_pop_btn"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal"
+            android:paddingLeft="12dp"
+            android:paddingRight="12dp">
 
-                <ImageView
-                    android:layout_width="22dp"
-                    android:layout_height="22dp"
-                    android:layout_marginLeft="8dp"
-                    android:src="@drawable/ic_adm" />
-            </LinearLayout>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/sans"
+                android:gravity="center"
+                android:text="دانلود مستقیم با ADM"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginLeft="8dp"
+                android:src="@drawable/ic_adm" />
         </LinearLayout>
     </LinearLayout>
-</ScrollView>
+</LinearLayout>

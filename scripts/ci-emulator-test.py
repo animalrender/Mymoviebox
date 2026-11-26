@@ -408,6 +408,18 @@ def _start_redirect_server(mp4_bytes: bytes, port: int = 18080):
     expected_final_url = f"http://127.0.0.1:{port}{target_path}?{target_query}"
     twohop_final_url = f"http://127.0.0.1:{port}{target_path}?expire=1795617009&hash=TWOHOP999"
     fallback_final_url = f"http://127.0.0.1:{port}/cdn/Fallback.Direct.2026.mkv?token=FB503"
+    hls_master_url = f"http://127.0.0.1:{port}/hls/master.m3u8?token=HLS302"
+    hls_1080_url = f"http://127.0.0.1:{port}/hls/1080p/stream.m3u8?q=1080"
+
+    master_m3u8 = (
+        "#EXTM3U\n"
+        '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="English",LANGUAGE="en",URI="audio_en.m3u8"\n'
+        '#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="Persian",LANGUAGE="fa",URI="/subs/hls_fa.vtt"\n'
+        "#EXT-X-STREAM-INF:BANDWIDTH=4200000,RESOLUTION=1920x1080\n"
+        "1080p/stream.m3u8?q=1080\n"
+        "#EXT-X-STREAM-INF:BANDWIDTH=2100000,RESOLUTION=1280x720\n"
+        "720p/stream.m3u8?q=720\n"
+    ).encode("utf-8")
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
@@ -432,6 +444,19 @@ def _start_redirect_server(mp4_bytes: bytes, port: int = 18080):
                 self.send_header("Location", twohop_final_url)
                 self.send_header("Content-Length", "0")
                 self.end_headers()
+                return
+            if self.path.startswith("/play-link/hls-redirect.php"):
+                self.send_response(302)
+                self.send_header("Location", hls_master_url)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            if self.path.startswith("/hls/master.m3u8"):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/vnd.apple.mpegurl")
+                self.send_header("Content-Length", str(len(master_m3u8)))
+                self.end_headers()
+                self.wfile.write(master_m3u8)
                 return
             if self.path.startswith("/play-link/adm-fallback.php"):
                 self.send_response(302)
@@ -489,7 +514,7 @@ def _start_redirect_server(mp4_bytes: bytes, port: int = 18080):
     srv = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     th = threading.Thread(target=srv.serve_forever, daemon=True)
     th.start()
-    return srv, expected_final_url, twohop_final_url, fallback_final_url, hits
+    return srv, expected_final_url, twohop_final_url, fallback_final_url, hls_master_url, hls_1080_url, hits
 
 
 def _build_dummy_adm_apk(work_dir: Path) -> Path:
@@ -710,22 +735,46 @@ def _open_stream_dialog():
         _, btn = _ensure_player_controls_visible(timeout=20.0)
         tap_node(btn, f"btn_download_stream (attempt {attempt + 1})", wait=0.8)
         try:
-            return wait_for_node(timeout=3.0, resource_id="TxtUrl_StreamDlg")
+            return wait_for_node(timeout=8.0, resource_id="TxtUrl_StreamDlg")
         except AssertionError:
             pass
     raise AssertionError("Timed out waiting for TxtUrl_StreamDlg after tapping btn_download_stream")
 
 
-def _check_landscape_non_overlap(root, btn_node, log):
-    btn_b = parse_bounds(btn_node.attrib.get("bounds", ""))
+def _boxes_overlap(a, b):
+    if not a or not b:
+        return False
+    return (a[2] > b[0]) and (a[0] < b[2]) and (a[3] > b[1]) and (a[1] < b[3])
+
+
+def _check_player_header_geometry(root, dl_btn_node, is_land, log):
+    dl_b = parse_bounds(dl_btn_node.attrib.get("bounds", ""))
+    toggle_node = find_node(root, resource_id="btn_grabber_toggle")
+    if toggle_node is None:
+        raise AssertionError("Missing btn_grabber_toggle in player controller header!")
+    toggle_b = parse_bounds(toggle_node.attrib.get("bounds", ""))
+    if not toggle_b or (toggle_b[2] - toggle_b[0]) < 20 or (toggle_b[3] - toggle_b[1]) < 20:
+        raise AssertionError(f"btn_grabber_toggle invalid bounds: {toggle_b}")
+    if toggle_b[2] > dl_b[0]:
+        raise AssertionError(f"btn_grabber_toggle {toggle_b} should be left of btn_download_stream {dl_b}")
+
+    back_node = find_node(root, resource_id="btn_back")
+    back_b = parse_bounds(back_node.attrib.get("bounds", "")) if back_node is not None else None
+    if back_b and _boxes_overlap(back_b, toggle_b):
+        raise AssertionError(f"btn_back {back_b} overlaps btn_grabber_toggle {toggle_b} (is_land={is_land})!")
+
+    sub_node = find_node(root, resource_id="btn_subtitles")
+    sub_b = parse_bounds(sub_node.attrib.get("bounds", "")) if sub_node is not None else None
+    if sub_b and (sub_b[2] - sub_b[0]) > 0 and _boxes_overlap(dl_b, sub_b):
+        raise AssertionError(f"btn_download_stream {dl_b} overlaps btn_subtitles {sub_b} (is_land={is_land})!")
+
     title_node = find_node(root, resource_id="TxtTitleFilm")
     title_bounds = parse_bounds(title_node.attrib.get("bounds", "")) if title_node is not None else None
-    if title_bounds and btn_b:
-        horiz_overlap = (title_bounds[2] > btn_b[0]) and (title_bounds[0] < btn_b[2])
-        vert_overlap = (title_bounds[3] > btn_b[1]) and (title_bounds[1] < btn_b[3])
-        if horiz_overlap and vert_overlap:
-            raise AssertionError(f"Landscape TxtTitleFilm {title_bounds} overlaps btn_download_stream {btn_b}!")
-    log(f"  Landscape layout verified (no overlap): btn={btn_b}, title={title_bounds}")
+    if is_land and title_bounds and (title_bounds[2] - title_bounds[0]) > 0 and _boxes_overlap(title_bounds, toggle_b):
+        raise AssertionError(f"Landscape TxtTitleFilm {title_bounds} overlaps btn_grabber_toggle {toggle_b}!")
+
+    mode = "landscape" if is_land else "portrait"
+    log(f"  Header layout verified ({mode}, no overlap): back={back_b}, toggle={toggle_b}, dl={dl_b}, sub={sub_b}, title={title_bounds}")
 
 
 def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
@@ -737,7 +786,7 @@ def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
         mp4_bytes = mp4_path.read_bytes()
         log(f"  Generated sample MP4 ({len(mp4_bytes)} bytes)")
 
-        srv, expected_url, twohop_url, fallback_url, hits = _start_redirect_server(mp4_bytes, port=port)
+        srv, expected_url, twohop_url, fallback_url, hls_master_url, hls_1080_url, hits = _start_redirect_server(mp4_bytes, port=port)
         dummy_adm_installed = False
         try:
             adb("reverse", f"tcp:{port}", f"tcp:{port}")
@@ -758,18 +807,25 @@ def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
                 "--es", "Type_movie", "1",
                 "--es", "Link_Id", "72818",
             )
-            time.sleep(2.0)
+            time.sleep(2.5)
 
             root1, btn1 = _wait_for_stream_grabbed(timeout=30.0)
             rot1 = root1.attrib.get("rotation", "0")
             is_land1 = rot1 in ("1", "3")
-            if is_land1:
-                _check_landscape_non_overlap(root1, btn1, log)
+            _check_player_header_geometry(root1, btn1, is_land1, log)
+            btn_toggle1 = find_node(root1, resource_id="btn_grabber_toggle")
+            if "روشن" not in (btn_toggle1.attrib.get("content-desc", "")):
+                raise AssertionError(f"Expected btn_grabber_toggle ON initially, got {btn_toggle1.attrib}")
             screencap(scr_dir, "23-player-initial-grabbed.png")
             log(f"  Initial player grabbed stream (rotation={rot1}): btn desc={btn1.attrib.get('content-desc')!r}")
 
-            # Open stream grabber dialog & check title + final redirected URL + action buttons
+            # Open stream grabber dialog & check multi-link capture (video + .srt subtitle), filter chips, toggle pill
             root_dlg, tv_url = _open_stream_dialog()
+            deadline_multi = time.time() + 10.0
+            while find_node(root_dlg, text_contains="test.srt") is None and time.time() < deadline_multi:
+                time.sleep(0.7)
+                root_dlg = dump_ui()
+                tv_url = find_node(root_dlg, resource_id="TxtUrl_StreamDlg") or tv_url
             shown_url = tv_url.attrib.get("text", "").strip()
             if shown_url != expected_url:
                 raise AssertionError(f"Expected redirected CDN URL {expected_url!r}, got {shown_url!r}")
@@ -777,26 +833,51 @@ def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
             dlg_title = dlg_title_node.attrib.get("text", "").strip() if dlg_title_node is not None else ""
             if movie_title not in dlg_title:
                 raise AssertionError(f"Expected movie title {movie_title!r} in dialog, got {dlg_title!r}")
+            if find_node(root_dlg, text_contains="Sample.Movie.2026.720p.WEB-DL.mkv") is None:
+                raise AssertionError("Multi-link list missing redirected video card Sample.Movie.2026.720p.WEB-DL.mkv")
+            if find_node(root_dlg, text_contains="test.srt") is None:
+                raise AssertionError("Multi-link list missing subtitle link test.srt")
+            if find_node(root_dlg, resource_id="BtnDialogGrabberToggle_StreamDlg") is None:
+                raise AssertionError("Missing BtnDialogGrabberToggle_StreamDlg in dialog")
             for action_id in ("BtnOpenUrl_StreamDlg", "BtnCopyUrl_StreamDlg", "BtnAdmUrl_StreamDlg"):
                 if find_node(root_dlg, resource_id=action_id) is None:
                     raise AssertionError(f"Missing action button {action_id} in stream download dialog")
             screencap(scr_dir, "24-player-download-dialog.png")
 
+            # Test category filter chip & user selection of subtitle link
+            tap_node(find_node(root_dlg, resource_id="TabFilterExtra_StreamDlg"), "TabFilterExtra_StreamDlg", wait=0.6)
+            root_sub_tab = dump_ui()
+            assert_text_absent(root_sub_tab, "Sample.Movie.2026.720p.WEB-DL.mkv")
+            sub_card = find_node(root_sub_tab, text_contains="test.srt")
+            if sub_card is None:
+                raise AssertionError("Subtitle item test.srt missing under Extra filter tab")
+            tap_node(sub_card, "select test.srt link", wait=0.6)
+            root_sub_sel = dump_ui()
+            sel_sub_url = find_node(root_sub_sel, resource_id="TxtUrl_StreamDlg").attrib.get("text", "").strip()
+            if sel_sub_url != sub_url:
+                raise AssertionError(f"Expected TxtUrl_StreamDlg to update to {sub_url!r}, got {sel_sub_url!r}")
+
+            # Switch back to All filter & select video link before ADM test
+            tap_node(find_node(root_sub_sel, resource_id="TabFilterAll_StreamDlg"), "TabFilterAll_StreamDlg", wait=0.6)
+            root_all_tab = dump_ui()
+            vid_card = find_node(root_all_tab, text_contains="Sample.Movie.2026.720p.WEB-DL.mkv")
+            tap_node(vid_card, "re-select primary video link", wait=0.6)
+            root_dlg_sel = dump_ui()
+
             # Test ADM missing dialog (while com.dv.adm is NOT installed)
-            tap_node(find_node(root_dlg, resource_id="BtnAdmUrl_StreamDlg"), "BtnAdmUrl_StreamDlg (no ADM)", wait=1.2)
+            tap_node(find_node(root_dlg_sel, resource_id="BtnAdmUrl_StreamDlg"), "BtnAdmUrl_StreamDlg (no ADM)", wait=1.2)
             root_adm_err, _ = wait_for_node(timeout=6.0, text_contains="برای دانلود با دانلودر ADM")
             screencap(scr_dir, "25-adm-missing-dialog.png")
             tap_node(find_node(root_adm_err, text="لغو"), "dismiss ADM install prompt", wait=0.8)
 
-            # Toggle orientation via btn_screen_rotate & verify the other orientation + re-capture
+            # Toggle orientation via btn_screen_rotate & verify the other orientation header non-overlap
             root_ctl, _ = _ensure_player_controls_visible(timeout=20.0)
             rot_btn = find_node(root_ctl, resource_id="btn_screen_rotate")
             tap_node(rot_btn, "btn_screen_rotate -> toggle orientation", wait=2.5)
             root2, btn2 = _wait_for_stream_grabbed(timeout=30.0)
             rot2 = root2.attrib.get("rotation", "0")
             is_land2 = rot2 in ("1", "3")
-            if is_land2:
-                _check_landscape_non_overlap(root2, btn2, log)
+            _check_player_header_geometry(root2, btn2, is_land2, log)
             if not (is_land1 or is_land2):
                 raise AssertionError(f"Neither initial ({rot1}) nor toggled ({rot2}) orientation was landscape!")
             screencap(scr_dir, "26-player-rotated-grabbed.png")
@@ -807,8 +888,26 @@ def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
             adb("install", "-r", str(dummy_apk))
             dummy_adm_installed = True
 
-            # Open dialog -> Copy URL -> Re-open -> Send to ADM
+            # Verify picking link #2 (subtitle .srt) and sending it to ADM sends sub_url!
+            root_dlg_sub2, _ = _open_stream_dialog()
+            sub_card2 = find_node(root_dlg_sub2, text_contains="test.srt")
+            tap_node(sub_card2, "pick test.srt for ADM", wait=0.6)
+            root_dlg_sub3 = dump_ui()
+            tap_node(find_node(root_dlg_sub3, resource_id="BtnAdmUrl_StreamDlg"), "BtnAdmUrl_StreamDlg (subtitle selected)", wait=2.0)
+            root_adm_sub, _ = wait_for_node(timeout=8.0, text_contains="ADM_RECEIVED_URI:")
+            adm_sub_uri = find_node(root_adm_sub, text_contains="ADM_RECEIVED_URI:").attrib.get("text", "").split("ADM_RECEIVED_URI:", 1)[1].strip()
+            if adm_sub_uri != sub_url:
+                raise AssertionError(f"Expected ADM to receive selected subtitle URL {sub_url!r}, got {adm_sub_uri!r}")
+            adb("shell", "input", "keyevent", "KEYCODE_BACK")
+            time.sleep(0.8)
+
+            # Open dialog -> pick video URL -> Copy -> Re-open -> Send to ADM
             root_dlg2, tv_url2 = _open_stream_dialog()
+            vid_card2 = find_node(root_dlg2, text_contains="Sample.Movie.2026.720p.WEB-DL.mkv")
+            if vid_card2 is not None:
+                tap_node(vid_card2, "select primary video link", wait=0.5)
+                root_dlg2 = dump_ui()
+                tv_url2 = find_node(root_dlg2, resource_id="TxtUrl_StreamDlg")
             shown_url2 = tv_url2.attrib.get("text", "").strip()
             if shown_url2 != expected_url:
                 raise AssertionError(f"Rotated dialog URL mismatch: {shown_url2!r}")
@@ -827,9 +926,59 @@ def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
             if clip_uri != expected_url:
                 raise AssertionError(f"Clipboard did NOT receive redirected final URL! expected={expected_url!r}, got={clip_uri!r}")
             screencap(scr_dir, "27-adm-received-final-url.png")
-            log(f"  Verified ADM + Clipboard exact redirected URL: {adm_uri}")
+            log(f"  Verified ADM + Clipboard exact redirected URL & subtitle selection: {adm_uri}")
 
-            # Verify 2-hop (302 -> 307) redirect resolution via activity_video_player
+            # Verify multi-link HLS .m3u8 manifest grabber (master + 1080p + 720p + audio + subtitle)
+            hls_play_url = f"http://127.0.0.1:{port}/play-link/hls-redirect.php?id=55"
+            adb("shell", "am", "force-stop", PKG)
+            time.sleep(0.5)
+            adb_am_start(
+                "-W",
+                "-n", f"{PKG}/com.delfan.madp.Acts.activity_video_player",
+                "--es", "url", hls_play_url,
+                "--es", "sub_title", "",
+                "--es", "title", "HLS Multi Variant Test",
+                "--es", "Type_movie", "1",
+                "--es", "Link_Id", "55",
+            )
+            time.sleep(2.0)
+            _wait_for_stream_grabbed(timeout=30.0)
+            root_hls, _ = _open_stream_dialog()
+            deadline_hls = time.time() + 6.0
+            tab_all_hls = find_node(root_hls, resource_id="TabFilterAll_StreamDlg")
+            tab_all_txt = tab_all_hls.attrib.get("text", "") if tab_all_hls is not None else ""
+            while "(5)" not in tab_all_txt and time.time() < deadline_hls:
+                time.sleep(0.7)
+                root_hls = dump_ui()
+                tab_all_hls = find_node(root_hls, resource_id="TabFilterAll_StreamDlg")
+                tab_all_txt = tab_all_hls.attrib.get("text", "") if tab_all_hls is not None else ""
+            if "(5)" not in tab_all_txt:
+                raise AssertionError(f"Expected 5 HLS manifest links grabbed (master + 1080p + 720p + audio + sub), got tab={tab_all_txt!r}")
+            screencap(scr_dir, "28-player-hls-multilinks.png")
+            tap_node(find_node(root_hls, resource_id="TabFilterStream_StreamDlg"), "TabFilterStream_StreamDlg", wait=0.6)
+            root_hls_stream = dump_ui()
+            card_1080 = find_node(root_hls_stream, text_contains="1080p")
+            if card_1080 is None:
+                raise AssertionError("Missing 1080p HLS variant card in HLS/DASH filter tab")
+            tap_node(card_1080, "select 1080p HLS variant", wait=0.6)
+            root_hls_sel = dump_ui()
+            sel_hls_url = find_node(root_hls_sel, resource_id="TxtUrl_StreamDlg").attrib.get("text", "").strip()
+            if sel_hls_url != hls_1080_url:
+                raise AssertionError(f"Expected selected 1080p HLS URL {hls_1080_url!r}, got {sel_hls_url!r}")
+            tap_node(find_node(root_hls_sel, resource_id="BtnClose_StreamDlg"), "close HLS dialog", wait=0.8)
+            log(f"  Verified HLS multi-variant manifest grabbing & selection: {hls_1080_url}")
+
+            # Verify player controller Grabber ON/OFF toggle button stops capture when OFF & persists across restart
+            root_tog, _ = _ensure_player_controls_visible(timeout=20.0)
+            btn_tog = find_node(root_tog, resource_id="btn_grabber_toggle")
+            tap_node(btn_tog, "btn_grabber_toggle -> OFF", wait=1.0)
+            root_after_off, _ = _ensure_player_controls_visible(timeout=15.0)
+            btn_tog_off = find_node(root_after_off, resource_id="btn_grabber_toggle")
+            if "خاموش" not in btn_tog_off.attrib.get("content-desc", ""):
+                raise AssertionError(f"Expected grabber toggle OFF desc, got {btn_tog_off.attrib}")
+            screencap(scr_dir, "29-player-grabber-toggled-off.png")
+
+            # Relaunch player on 2-hop URL while Grabber is OFF -> should NOT capture any link!
             twohop_play_url = f"http://127.0.0.1:{port}/play-link/twohop.php?id=99"
             adb("shell", "am", "force-stop", PKG)
             time.sleep(0.5)
@@ -838,17 +987,40 @@ def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
                 "-n", f"{PKG}/com.delfan.madp.Acts.activity_video_player",
                 "--es", "url", twohop_play_url,
                 "--es", "sub_title", "",
-                "--es", "title", "Two Hop Test",
+                "--es", "title", "Grabber Off Persistence Test",
                 "--es", "Type_movie", "1",
                 "--es", "Link_Id", "99",
             )
-            time.sleep(2.0)
-            _wait_for_stream_grabbed(timeout=30.0)
-            _, tv_2h = _open_stream_dialog()
-            shown_2h = tv_2h.attrib.get("text", "").strip()
+            time.sleep(2.5)
+            root_off_ctl, btn_dl_off = _ensure_player_controls_visible(timeout=20.0)
+            if "آماده" in btn_dl_off.attrib.get("content-desc", ""):
+                raise AssertionError(f"Grabber should NOT capture links while OFF! desc={btn_dl_off.attrib}")
+            btn_tog_persisted = find_node(root_off_ctl, resource_id="btn_grabber_toggle")
+            if "خاموش" not in btn_tog_persisted.attrib.get("content-desc", ""):
+                raise AssertionError(f"Grabber OFF state did not persist across restart: {btn_tog_persisted.attrib}")
+
+            root_dlg_off, tv_off = _open_stream_dialog()
+            if find_node(root_dlg_off, resource_id="TxtEmptyLinks_StreamDlg") is None:
+                raise AssertionError("Expected TxtEmptyLinks_StreamDlg visible while Grabber is OFF")
+            if tv_off.attrib.get("text", "").strip() != "لینکی انتخاب نشده است":
+                raise AssertionError(f"Expected empty URL placeholder when Grabber OFF, got {tv_off.attrib}")
+            screencap(scr_dir, "30-player-dialog-grabber-off.png")
+
+            # Turn Grabber back ON from inside the dialog & verify live active scan captures twohop_url
+            tap_node(find_node(root_dlg_off, resource_id="BtnDialogGrabberToggle_StreamDlg"), "BtnDialogGrabberToggle_StreamDlg -> ON", wait=1.5)
+            deadline_on = time.time() + 10.0
+            shown_2h = ""
+            while time.time() < deadline_on:
+                root_dlg_on = dump_ui()
+                n_2h = find_node(root_dlg_on, resource_id="TxtUrl_StreamDlg")
+                shown_2h = n_2h.attrib.get("text", "").strip() if n_2h is not None else ""
+                if shown_2h == twohop_url:
+                    break
+                time.sleep(0.7)
             if shown_2h != twohop_url:
-                raise AssertionError(f"2-hop redirect mismatch: expected={twohop_url!r}, got={shown_2h!r}")
-            log(f"  Verified 2-hop redirect capture: {twohop_url}")
+                raise AssertionError(f"Re-enabling Grabber did not capture 2-hop URL {twohop_url!r}, got {shown_2h!r}")
+            screencap(scr_dir, "31-player-dialog-grabber-resumed-on.png")
+            log(f"  Verified Grabber OFF persistence + live ON re-capture of 2-hop URL: {twohop_url}")
 
             # Verify off-thread HTTP fallback resolver + ADM handoff when target returns 503 to ExoPlayer
             fb_play_url = f"http://127.0.0.1:{port}/play-link/adm-fallback.php?id=77"
@@ -1315,6 +1487,8 @@ def main():
                 (log_dir / "offline_favorites_v1.xml").write_text(prefs_xml, encoding="utf-8")
                 my_prefs_xml = adb("shell", "cat", f"/data/data/{PKG}/shared_prefs/MyPrefers.xml", check=False)
                 (log_dir / "MyPrefers.xml").write_text(my_prefs_xml, encoding="utf-8")
+                grab_prefs_xml = adb("shell", "cat", f"/data/data/{PKG}/shared_prefs/offline_stream_grabber.xml", check=False)
+                (log_dir / "offline_stream_grabber.xml").write_text(grab_prefs_xml, encoding="utf-8")
         except Exception:
             pass
 

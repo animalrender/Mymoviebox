@@ -535,23 +535,6 @@ def patch_title_lang_hooks(decoded_dir: Path):
 def patch_player_controller_layouts(decoded_dir: Path):
     import xml.etree.ElementTree as ET
 
-    insert_btn = (
-        '\n    <ImageView'
-        ' android:id="@+id/btn_download_stream"'
-        ' android:padding="@dimen/_5sdp"'
-        ' android:focusable="true"'
-        ' android:clickable="true"'
-        ' android:layout_width="@dimen/_32sdp"'
-        ' android:layout_height="@dimen/_32sdp"'
-        ' android:layout_margin="@dimen/_8sdp"'
-        ' android:src="@drawable/ic_player_download_outline"'
-        ' android:contentDescription="دانلود یا کپی لینک مستقیم"'
-        ' app:layout_constraintBottom_toBottomOf="@id/header"'
-        ' app:layout_constraintEnd_toStartOf="@id/btn_subtitles"'
-        ' app:layout_constraintTop_toTopOf="@id/header"'
-        ' app:tint="@color/white" />'
-    )
-
     for rel in (
         "res/layout/custom_exo_controller_view.xml",
         "res/layout-land/custom_exo_controller_view.xml",
@@ -560,10 +543,79 @@ def patch_player_controller_layouts(decoded_dir: Path):
         if not xml_path.is_file():
             raise RuntimeError(f"Missing decoded player controller layout: {xml_path}")
         text = xml_path.read_text(encoding="utf-8")
-        if "btn_download_stream" in text:
-            raise RuntimeError(f"btn_download_stream already exists in {rel}")
+        if "btn_download_stream" in text or "btn_grabber_toggle" in text:
+            raise RuntimeError(f"Grabber buttons already exist in {rel}")
 
-        # 1. Insert btn_download_stream right after btn_subtitles </LinearLayout>
+        is_land = "layout-land" in rel
+
+        # 0. In portrait, compact the 5 right-side header action buttons so
+        #    btn_download_stream + btn_grabber_toggle fit comfortably without touching btn_back.
+        if not is_land:
+            for btn_id in (
+                "btn_size_reduce",
+                "btn_size_enlarge",
+                "btn_screen_rotate",
+                "btn_full_screen",
+                "btn_speed",
+            ):
+                btn_pat = re.compile(
+                    rf'(<ImageView\b[^>]*android:id="@id/{btn_id}"[^>]*?)(/?>)',
+                    re.DOTALL,
+                )
+                m_btn = btn_pat.search(text)
+                if not m_btn:
+                    raise RuntimeError(f"Could not find {btn_id} in {rel}")
+                tag_head, tag_end = m_btn.group(1), m_btn.group(2)
+                tag_head, n_w = re.subn(r'android:layout_width="[^"]*"', 'android:layout_width="@dimen/_24sdp"', tag_head)
+                tag_head, n_h = re.subn(r'android:layout_height="[^"]*"', 'android:layout_height="@dimen/_24sdp"', tag_head)
+                tag_head, n_p = re.subn(r'android:padding="[^"]*"', 'android:padding="@dimen/_3sdp"', tag_head)
+                tag_head, n_m = re.subn(
+                    r'android:layout_margin="[^"]*"',
+                    'android:layout_marginLeft="@dimen/_1sdp" android:layout_marginRight="@dimen/_1sdp"',
+                    tag_head,
+                )
+                if min(n_w, n_h, n_p, n_m) == 0:
+                    raise RuntimeError(f"Unexpected portrait button attributes on {btn_id} in {rel}: {tag_head}")
+                text = text[: m_btn.start()] + tag_head + tag_end + text[m_btn.end() :]
+
+        size_dim = "@dimen/_32sdp" if is_land else "@dimen/_24sdp"
+        pad_dim = "@dimen/_5sdp" if is_land else "@dimen/_3sdp"
+        margin_attrs = (
+            'android:layout_margin="@dimen/_6sdp"'
+            if is_land
+            else 'android:layout_marginLeft="@dimen/_1sdp" android:layout_marginRight="@dimen/_1sdp"'
+        )
+        insert_btns = (
+            f'\n    <ImageView'
+            f' android:id="@+id/btn_download_stream"'
+            f' android:padding="{pad_dim}"'
+            f' android:focusable="true"'
+            f' android:clickable="true"'
+            f' android:layout_width="{size_dim}"'
+            f' android:layout_height="{size_dim}"'
+            f' {margin_attrs}'
+            f' android:src="@drawable/ic_player_download_outline"'
+            f' android:contentDescription="دانلود یا کپی لینک مستقیم"'
+            f' app:layout_constraintBottom_toBottomOf="@id/header"'
+            f' app:layout_constraintEnd_toStartOf="@id/btn_subtitles"'
+            f' app:layout_constraintTop_toTopOf="@id/header"'
+            f' app:tint="@color/white" />'
+            f'\n    <ImageView'
+            f' android:id="@+id/btn_grabber_toggle"'
+            f' android:padding="{pad_dim}"'
+            f' android:focusable="true"'
+            f' android:clickable="true"'
+            f' android:layout_width="{size_dim}"'
+            f' android:layout_height="{size_dim}"'
+            f' {margin_attrs}'
+            f' android:src="@drawable/ic_grabber_on"'
+            f' android:contentDescription="گربر لینک: روشن"'
+            f' app:layout_constraintBottom_toBottomOf="@id/header"'
+            f' app:layout_constraintEnd_toStartOf="@id/btn_download_stream"'
+            f' app:layout_constraintTop_toTopOf="@id/header" />'
+        )
+
+        # 1. Insert btn_download_stream and btn_grabber_toggle right after btn_subtitles </LinearLayout>
         sub_pat = re.compile(
             r'(<LinearLayout\b[^>]*android:id="@id/btn_subtitles"[^>]*>.*?</LinearLayout>)',
             re.DOTALL,
@@ -571,15 +623,15 @@ def patch_player_controller_layouts(decoded_dir: Path):
         m_sub = sub_pat.search(text)
         if not m_sub:
             raise RuntimeError(f"Could not find btn_subtitles LinearLayout in {rel}")
-        text = text[: m_sub.end(1)] + insert_btn + text[m_sub.end(1) :]
+        text = text[: m_sub.end(1)] + insert_btns + text[m_sub.end(1) :]
 
-        # 2. Keep TxtTitleFilm bounded cleanly to the left of btn_download_stream
+        # 2. Keep TxtTitleFilm bounded cleanly to the left of btn_grabber_toggle
         title_pat = re.compile(r'(<TextView\b[^>]*android:id="@id/TxtTitleFilm"[^>]*?)(/?>)', re.DOTALL)
         m_title = title_pat.search(text)
         if not m_title:
             raise RuntimeError(f"Could not find TxtTitleFilm in {rel}")
         tag_head, tag_end = m_title.group(1), m_title.group(2)
-        if "layout-land" in rel:
+        if is_land:
             tag_head = re.sub(r'android:layout_width="[^"]*"', 'android:layout_width="0.0dip"', tag_head)
             if "android:ellipsize=" not in tag_head:
                 tag_head += ' android:ellipsize="end"'
@@ -588,7 +640,7 @@ def patch_player_controller_layouts(decoded_dir: Path):
             if "app:layout_constraintHorizontal_bias=" not in tag_head:
                 tag_head += ' app:layout_constraintHorizontal_bias="0.0"'
         if "app:layout_constraintEnd_toStartOf=" not in tag_head:
-            tag_head += ' app:layout_constraintEnd_toStartOf="@id/btn_download_stream"'
+            tag_head += ' app:layout_constraintEnd_toStartOf="@id/btn_grabber_toggle"'
         text = text[: m_title.start()] + tag_head + tag_end + text[m_title.end() :]
 
         ET.fromstring(text)
