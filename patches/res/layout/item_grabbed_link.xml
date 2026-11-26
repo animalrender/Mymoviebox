@@ -3,12 +3,12 @@
     android:id="@+id/CardRoot_GrabItem"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_marginBottom="6dp"
+    android:layout_marginBottom="5dp"
     android:background="@drawable/stream_link_item_bg"
     android:clickable="true"
     android:focusable="true"
     android:orientation="vertical"
-    android:padding="8dp">
+    android:padding="7dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -77,23 +77,23 @@
         android:id="@+id/TxtItemName_GrabItem"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="3dp"
         android:ellipsize="middle"
         android:gravity="left"
         android:singleLine="true"
         android:textColor="@color/TxtcolorHome"
         android:textDirection="ltr"
-        android:textSize="12sp"
+        android:textSize="11sp"
         android:textStyle="bold" />
 
     <TextView
         android:id="@+id/TxtItemUrl_GrabItem"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
+        android:layout_marginTop="1dp"
         android:ellipsize="middle"
         android:gravity="left"
-        android:maxLines="2"
+        android:singleLine="true"
         android:textColor="@color/TxtcolorHome2"
         android:textDirection="ltr"
         android:textSize="10sp" />

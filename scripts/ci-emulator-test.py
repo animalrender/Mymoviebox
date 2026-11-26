@@ -822,7 +822,7 @@ def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
             # Open stream grabber dialog & check multi-link capture (video + .srt subtitle), filter chips, toggle pill
             root_dlg, tv_url = _open_stream_dialog()
             deadline_multi = time.time() + 10.0
-            while find_node(root_dlg, text_contains="test.srt") is None and time.time() < deadline_multi:
+            while find_node(root_dlg, text_contains="صدا / زیرنویس (1)") is None and time.time() < deadline_multi:
                 time.sleep(0.7)
                 root_dlg = dump_ui()
                 tv_url = find_node(root_dlg, resource_id="TxtUrl_StreamDlg") or tv_url
@@ -835,13 +835,15 @@ def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
                 raise AssertionError(f"Expected movie title {movie_title!r} in dialog, got {dlg_title!r}")
             if find_node(root_dlg, text_contains="Sample.Movie.2026.720p.WEB-DL.mkv") is None:
                 raise AssertionError("Multi-link list missing redirected video card Sample.Movie.2026.720p.WEB-DL.mkv")
-            if find_node(root_dlg, text_contains="test.srt") is None:
-                raise AssertionError("Multi-link list missing subtitle link test.srt")
+            if find_node(root_dlg, text_contains="صدا / زیرنویس (1)") is None:
+                raise AssertionError("Multi-link filter missing subtitle count 'صدا / زیرنویس (1)'")
             if find_node(root_dlg, resource_id="BtnDialogGrabberToggle_StreamDlg") is None:
                 raise AssertionError("Missing BtnDialogGrabberToggle_StreamDlg in dialog")
             for action_id in ("BtnOpenUrl_StreamDlg", "BtnCopyUrl_StreamDlg", "BtnAdmUrl_StreamDlg"):
-                if find_node(root_dlg, resource_id=action_id) is None:
-                    raise AssertionError(f"Missing action button {action_id} in stream download dialog")
+                an = find_node(root_dlg, resource_id=action_id)
+                ab = parse_bounds(an.attrib.get("bounds", "")) if an is not None else None
+                if an is None or not ab or (ab[3] - ab[1]) < 30:
+                    raise AssertionError(f"Missing or clipped action button {action_id} in stream download dialog (bounds={ab})")
             screencap(scr_dir, "24-player-download-dialog.png")
 
             # Test category filter chip & user selection of subtitle link
@@ -890,7 +892,9 @@ def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
 
             # Verify picking link #2 (subtitle .srt) and sending it to ADM sends sub_url!
             root_dlg_sub2, _ = _open_stream_dialog()
-            sub_card2 = find_node(root_dlg_sub2, text_contains="test.srt")
+            tap_node(find_node(root_dlg_sub2, resource_id="TabFilterExtra_StreamDlg"), "TabFilterExtra_StreamDlg (ADM sub pick)", wait=0.6)
+            root_dlg_sub2b = dump_ui()
+            sub_card2 = find_node(root_dlg_sub2b, text_contains="test.srt")
             tap_node(sub_card2, "pick test.srt for ADM", wait=0.6)
             root_dlg_sub3 = dump_ui()
             tap_node(find_node(root_dlg_sub3, resource_id="BtnAdmUrl_StreamDlg"), "BtnAdmUrl_StreamDlg (subtitle selected)", wait=2.0)
@@ -903,11 +907,15 @@ def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
 
             # Open dialog -> pick video URL -> Copy -> Re-open -> Send to ADM
             root_dlg2, tv_url2 = _open_stream_dialog()
+            tap_all2 = find_node(root_dlg2, resource_id="TabFilterAll_StreamDlg")
+            if tap_all2 is not None:
+                tap_node(tap_all2, "TabFilterAll_StreamDlg", wait=0.5)
+                root_dlg2 = dump_ui()
             vid_card2 = find_node(root_dlg2, text_contains="Sample.Movie.2026.720p.WEB-DL.mkv")
             if vid_card2 is not None:
                 tap_node(vid_card2, "select primary video link", wait=0.5)
                 root_dlg2 = dump_ui()
-                tv_url2 = find_node(root_dlg2, resource_id="TxtUrl_StreamDlg")
+            tv_url2 = find_node(root_dlg2, resource_id="TxtUrl_StreamDlg")
             shown_url2 = tv_url2.attrib.get("text", "").strip()
             if shown_url2 != expected_url:
                 raise AssertionError(f"Rotated dialog URL mismatch: {shown_url2!r}")

@@ -1008,8 +1008,8 @@ public final class StreamGrabber {
                 try {
                     DisplayMetrics dm = act.getResources().getDisplayMetrics();
                     boolean isLand = dm.widthPixels > dm.heightPixels;
-                    int maxPx = Math.round((isLand ? 128f : 250f) * dm.density);
-                    int measureW = ui.dialogWidthPx > 0 ? Math.max(200, ui.dialogWidthPx - Math.round(36f * dm.density)) : Math.round(320f * dm.density);
+                    int maxPx = Math.round((isLand ? 90f : 240f) * dm.density);
+                    int measureW = ui.dialogWidthPx > 0 ? Math.max(200, ui.dialogWidthPx - Math.round(32f * dm.density)) : Math.round(320f * dm.density);
                     ui.listContainer.measure(
                             View.MeasureSpec.makeMeasureSpec(measureW, View.MeasureSpec.AT_MOST),
                             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
@@ -1117,8 +1117,9 @@ public final class StreamGrabber {
         if (win != null) {
             win.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             DisplayMetrics dm = act.getResources().getDisplayMetrics();
-            int maxW = (int) (440f * dm.density);
-            width = Math.min((int) (dm.widthPixels * 0.92f), maxW);
+            boolean isLand = dm.widthPixels > dm.heightPixels;
+            int maxW = (int) ((isLand ? 540f : 440f) * dm.density);
+            width = Math.min((int) (dm.widthPixels * (isLand ? 0.90f : 0.92f)), maxW);
             win.setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
             win.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         }
