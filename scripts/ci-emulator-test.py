@@ -849,7 +849,10 @@ def run_player_and_adm_e2e(scr_dir: Path, log_dir: Path, log):
             # Test category filter chip & user selection of subtitle link
             tap_node(find_node(root_dlg, resource_id="TabFilterExtra_StreamDlg"), "TabFilterExtra_StreamDlg", wait=0.6)
             root_sub_tab = dump_ui()
-            assert_text_absent(root_sub_tab, "Sample.Movie.2026.720p.WEB-DL.mkv")
+            list_sub_tab = find_node(root_sub_tab, resource_id="ListLinks_StreamDlg")
+            if list_sub_tab is None:
+                raise AssertionError("Missing ListLinks_StreamDlg under Extra filter tab")
+            assert_text_absent(list_sub_tab, "Sample.Movie.2026.720p.WEB-DL.mkv")
             sub_card = find_node(root_sub_tab, text_contains="test.srt")
             if sub_card is None:
                 raise AssertionError("Subtitle item test.srt missing under Extra filter tab")
